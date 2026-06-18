@@ -1,0 +1,43 @@
+# Experiment Log
+
+This file records optimization runs, surrogate-model runs, evaluator checks, parameters, seeds, outputs, and conclusions.
+
+## 2026-06-18
+
+Initial setup notes:
+
+- Target bidder: Unit 5 (`X5`).
+- Planned evaluator: exact rule engine by enumeration over the discrete random choices in `qingbiao.md`.
+- Planned optimizer route: Differential Evolution over adjustable discount rates in `[10, 30]`.
+- Planned surrogate route: train and validate a neural-network surrogate against exact evaluator outputs before using it for candidate generation.
+
+Implementation update:
+
+- Added `de_softmax_optimizer.py`, a Differential Evolution optimizer for `X5`.
+- Added `numpy` and `scipy` dependencies and created a local `.venv` with `uv --cache-dir .uv-cache sync`.
+- Optimizer defaults: `samples=8192`, `maxiter=800`, `popsize=90`, `workers=-1`, `seed=42`, `checkpoint_every=50`.
+- Optimizer output directory default: `de_softmax_results/`.
+- Commit pushed to GitHub: `48f0953 Add differential evolution softmax optimizer`.
+
+Validation implementation update:
+
+- Added `validate_de_results.py`, a high-precision validator for DE checkpoints/results.
+- Validator default flow: read `best_result.json` and `checkpoint_iter_*.json`; choose the top 20 by surrogate objective; validate with 32768 Sobol samples over the 8 non-adjustable units; exactly enumerate all 324 discrete rule scenarios per sample; refine the top 5 true-probability candidates with 65536 samples.
+- Validator outputs: `validation_summary.csv`, `validation_results.json`, and `validation_report.txt`.
+- Added `tests/test_validate_de_results.py` for candidate loading, TopN behavior, bid mapping, evaluator consistency with `forward_bidding_calculator.py`, count helpers, and refinement selection.
+
+Smoke checks:
+
+- Ran `uv --cache-dir .uv-cache run python -m unittest discover -s tests -v`.
+- Result after optimizer implementation: 3 tests passed.
+- Ran a tiny optimizer smoke command with `samples=16`, `maxiter=1`, `popsize=3`, `workers=1`, `checkpoint_every=1`, `--no-polish`, `--quiet`.
+- Result: completed successfully and wrote checkpoint/final result files.
+- Ran `uv --cache-dir .uv-cache run python -m unittest discover -s tests -v` after adding the validator and increasing optimizer default samples.
+- Result: 7 tests passed.
+- Ran a tiny validator smoke command against `de_softmax_smoke_results` with `samples=4`, `top=1`, `refine-top=1`, `refine-samples=8`, `workers=1`, and `chunk-size=2`.
+- Result: completed successfully and wrote CSV/JSON/TXT outputs under `/private/tmp/qingbiao_validate_smoke`.
+
+Notes:
+
+- No full high-precision optimization run has been recorded yet.
+- No full high-precision validation run on a real optimizer output directory has been recorded yet.

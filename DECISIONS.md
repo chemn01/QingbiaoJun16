@@ -1,0 +1,22 @@
+# Decisions
+
+This file records durable modeling and engineering decisions. Keep entries concise and append-only unless a later decision supersedes an earlier one.
+
+## 2026-06-18
+
+- Treat `qingbiao.md` as the immutable source of truth for the tender-cleaning and winner-selection rules.
+- Treat Unit 5 (`X5`) as the target bidder unless the user explicitly changes the objective.
+- Interpret `X_i` as discount rates, not quoted prices. Larger `X_i` means a lower quoted price.
+- Use ordinary round-half-up behavior for rule-critical rounding unless a different convention is confirmed.
+- Prefer exact enumeration over Monte Carlo for fixed bid-vector evaluation while all random events remain discrete and small.
+- Keep non-adjustable bidder discounts fixed during optimization only after documenting the chosen baseline values.
+- Write rule-engine tests before trusting optimization or surrogate-model results.
+- First Differential Evolution optimizer optimizes only `X3, X5, X6, X7, X9, X10, X11, X13, X16, X17, X19, X20`.
+- During optimizer candidate generation, non-adjustable bidders are modeled as Sobol/CRN random environments drawn from their known ranges.
+- Optimizer objective is a surrogate: hard official stages locate the first `X5` failure, then a soft failure-margin loss is applied; final winning uses a one-sided softmax that respects `X_i > K`.
+- Optimizer checkpoints are saved periodically because surrogate objective value is not guaranteed to rank true winning probability perfectly.
+- True winning-probability validation should be implemented separately and used to compare optimizer checkpoints/results.
+- Local development environment uses `uv` with project-local cache: `uv --cache-dir .uv-cache ...`.
+- Increase the optimizer default CRN sample count from 4096 to 8192 for more stable candidate generation over the 8 non-adjustable continuous environment variables.
+- Validate optimizer outputs with a two-stage Sobol scheme: first pass 32768 samples over the 8 non-adjustable units for the top 20 surrogate candidates, then refine the top 5 true-probability candidates with 65536 samples.
+- For validation, exactly enumerate all 324 discrete rule scenarios per continuous environment sample and estimate uncertainty across continuous environment samples.

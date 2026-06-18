@@ -814,7 +814,7 @@ def make_checkpoint_callback(
 
 
 def optimize_with_differential_evolution(
-    n_samples: int = 4096,
+    n_samples: int = 8192,
     maxiter: int = 800,
     popsize: int = 90,
     workers: int = -1,
@@ -940,7 +940,7 @@ def optimize_with_differential_evolution(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="X5 差分进化 softmax 报价优化器")
-    parser.add_argument("--samples", type=int, default=4096, help="CRN 环境样本数")
+    parser.add_argument("--samples", type=int, default=8192, help="CRN 环境样本数")
     parser.add_argument("--maxiter", type=int, default=800, help="DE 最大迭代代数")
     parser.add_argument("--popsize", type=int, default=90, help="DE 种群倍率")
     parser.add_argument("--workers", type=int, default=-1, help="-1 表示最多使用全部 CPU")
