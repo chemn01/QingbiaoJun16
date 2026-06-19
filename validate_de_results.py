@@ -15,16 +15,16 @@ import math
 import multiprocessing as mp
 import time
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import mean
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 from scipy.stats import qmc
 
 import de_softmax_optimizer as optimizer
-
 
 DEFAULT_SAMPLES = 32768
 DEFAULT_REFINE_SAMPLES = 65536
@@ -96,7 +96,7 @@ class PartialStats:
     target_n_wins: Counter[str] = field(default_factory=Counter)
     k2_wins: Counter[str] = field(default_factory=Counter)
 
-    def merge(self, other: "PartialStats") -> None:
+    def merge(self, other: PartialStats) -> None:
         self.samples += other.samples
         self.total_scenarios += other.total_scenarios
         self.target_wins += other.target_wins
@@ -496,7 +496,11 @@ def evaluate_candidate_chunk(args: tuple[int, np.ndarray, np.ndarray]) -> tuple[
     return candidate_index, partial
 
 
-def distribution(counter: Counter[str], total: int, ordered_keys: list[str] | None = None) -> dict[str, dict[str, float]]:
+def distribution(
+    counter: Counter[str],
+    total: int,
+    ordered_keys: Sequence[str] | None = None,
+) -> dict[str, dict[str, float]]:
     keys = ordered_keys if ordered_keys is not None else sorted(counter.keys())
     return {
         key: {
@@ -510,7 +514,7 @@ def distribution(counter: Counter[str], total: int, ordered_keys: list[str] | No
 
 def marginal_distribution(
     wins: Counter[str],
-    values: list[int | float],
+    values: Sequence[int | float],
     denominator_per_value: int,
 ) -> dict[str, dict[str, float]]:
     return {
@@ -712,8 +716,8 @@ def result_to_row(result: ValidationResult) -> dict[str, Any]:
         row[f"bid_{key}"] = value
 
     for dimension, values in result.marginal_probabilities.items():
-        for value, stats in values.items():
-            row[f"{dimension}_{value}_win_probability"] = stats["win_probability"]
+        for option_value, stats in values.items():
+            row[f"{dimension}_{option_value}_win_probability"] = stats["win_probability"]
 
     for winner, stats in result.winner_distribution.items():
         row[f"winner_{winner}_rate"] = stats["rate"]

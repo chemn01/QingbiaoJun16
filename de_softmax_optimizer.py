@@ -18,15 +18,15 @@ import math
 import multiprocessing as mp
 import os
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 from scipy.optimize import differential_evolution
 from scipy.stats import qmc
-
 
 # ===================== 当前规则常量 =====================
 
@@ -171,11 +171,14 @@ EXCLUDE_LOWEST_PRICE_VALUES = np.array([1, 2], dtype=int)
 TARGET_N_VALUES = np.array([3, 4, 5], dtype=int)
 K2_VALUES = np.array([0.0, 0.25, 0.5], dtype=float)
 
+DEFAULT_MAX_WORKERS = 90
+WINDOWS_MAX_POOL_WORKERS = 61
+
 
 # ===================== CRN 全局上下文 =====================
 
-_GLOBAL_CONTEXT: "CRNContext | None" = None
-_GLOBAL_OPTIONS: "ObjectiveOptions | None" = None
+_GLOBAL_CONTEXT: CRNContext | None = None
+_GLOBAL_OPTIONS: ObjectiveOptions | None = None
 
 
 @dataclass(frozen=True)
@@ -775,26 +778,28 @@ def make_checkpoint_callback(
     options: ObjectiveOptions,
     config: dict[str, Any],
     start_time: float,
-):
-    state = {"iteration": 0, "best_fun": math.inf, "best_x": None}
+) -> Callable[[np.ndarray, float | None], bool]:
+    iteration = 0
+    best_fun = math.inf
+    best_x: np.ndarray | None = None
 
     def callback(xk: np.ndarray, convergence: float | None = None) -> bool:
-        state["iteration"] += 1
-        iteration = int(state["iteration"])
+        nonlocal best_fun, best_x, iteration
+
+        iteration += 1
 
         should_save = checkpoint_every > 0 and iteration % checkpoint_every == 0
         if not should_save:
             return False
 
         objective_value = robust_objective(np.asarray(xk, dtype=float))
-        if objective_value < state["best_fun"]:
-            state["best_fun"] = objective_value
-            state["best_x"] = np.asarray(xk, dtype=float).copy()
+        if objective_value < best_fun:
+            best_fun = objective_value
+            best_x = np.asarray(xk, dtype=float).copy()
 
-        best_x = state["best_x"] if state["best_x"] is not None else np.asarray(xk, dtype=float)
-        best_fun = float(state["best_fun"])
+        current_best_x = best_x if best_x is not None else np.asarray(xk, dtype=float)
         payload = build_result_payload(
-            best_x,
+            current_best_x,
             best_fun,
             context,
             options,
@@ -811,6 +816,26 @@ def make_checkpoint_callback(
 
 
 # ===================== 优化入口 =====================
+
+
+def resolve_worker_count(workers: int) -> int:
+    if workers == -1:
+        actual_workers = min(mp.cpu_count(), DEFAULT_MAX_WORKERS)
+    else:
+        actual_workers = int(workers)
+
+    if actual_workers < 1:
+        raise ValueError("--workers 必须为 -1 或正整数")
+
+    if os.name == "nt" and actual_workers > WINDOWS_MAX_POOL_WORKERS:
+        print(
+            "[workers] Windows multiprocessing 句柄限制要求进程数不超过 "
+            f"{WINDOWS_MAX_POOL_WORKERS}；已从 {actual_workers} 降为 "
+            f"{WINDOWS_MAX_POOL_WORKERS}。"
+        )
+        actual_workers = WINDOWS_MAX_POOL_WORKERS
+
+    return actual_workers
 
 
 def optimize_with_differential_evolution(
@@ -839,12 +864,14 @@ def optimize_with_differential_evolution(
     )
     context = initialize_crn_context(n_samples=n_samples, seed=seed, use_sobol=True)
     set_global_context(context, options)
+    actual_workers = resolve_worker_count(workers)
 
     config = {
         "samples": n_samples,
         "maxiter": maxiter,
         "popsize": popsize,
         "workers": workers,
+        "actual_workers": actual_workers,
         "seed": seed,
         "checkpoint_every": checkpoint_every,
         "strategy": "best1bin",
@@ -863,7 +890,11 @@ def optimize_with_differential_evolution(
     print(f"优化变量: {', '.join(unit_key(unit) for unit in ADJUSTABLE_UNITS)}")
     print(f"不可调环境: {', '.join(unit_key(unit) for unit in NON_ADJUSTABLE_UNITS)}")
     print(f"CRN 样本数: {n_samples}")
-    print(f"maxiter={maxiter}, popsize={popsize}, workers={workers}, seed={seed}")
+    if actual_workers == workers:
+        worker_text = str(workers)
+    else:
+        worker_text = f"{workers} -> {actual_workers}"
+    print(f"maxiter={maxiter}, popsize={popsize}, workers={worker_text}, seed={seed}")
     print(f"checkpoint_every={checkpoint_every}, output_dir={output_path}")
     print("注意: 目标函数是中标概率近似，不是真实中标概率。")
     print("=" * 72)
@@ -871,8 +902,7 @@ def optimize_with_differential_evolution(
     start_time = time.time()
     pool: mp.pool.Pool | None = None
     map_workers: Any = 1
-    if workers != 1:
-        actual_workers = min(mp.cpu_count(), 90) if workers == -1 else int(workers)
+    if actual_workers != 1:
         pool = mp.Pool(
             processes=actual_workers,
             initializer=_init_worker,
@@ -943,7 +973,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--samples", type=int, default=8192, help="CRN 环境样本数")
     parser.add_argument("--maxiter", type=int, default=800, help="DE 最大迭代代数")
     parser.add_argument("--popsize", type=int, default=90, help="DE 种群倍率")
-    parser.add_argument("--workers", type=int, default=-1, help="-1 表示最多使用全部 CPU")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=-1,
+        help="-1 表示最多使用全部 CPU；Windows 会自动限制到安全进程数",
+    )
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
     parser.add_argument("--checkpoint-every", type=int, default=50, help="每多少代保存一次 checkpoint")
     parser.add_argument("--output-dir", type=Path, default=Path("de_softmax_results"), help="结果输出目录")

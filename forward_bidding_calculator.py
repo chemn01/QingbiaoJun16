@@ -21,10 +21,9 @@ import random
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from statistics import mean
-
 
 # ===================== 基础数据：来自 qingbiao.md =====================
 
@@ -165,13 +164,13 @@ def performance_score(unit: int) -> float:
     return float(PERFORMANCE_SCORES[unit - 1])
 
 
-def lower_quote_key(unit: int, bids: list[float | None]) -> tuple[float, int]:
+def lower_quote_key(unit: int, bids: list[float]) -> tuple[float, int]:
     """真实报价从低到高排序：下浮率越大，真实报价越低。"""
 
     return (-float(bids[unit]), unit)
 
 
-def higher_quote_key(unit: int, bids: list[float | None]) -> tuple[float, int]:
+def higher_quote_key(unit: int, bids: list[float]) -> tuple[float, int]:
     """真实报价从高到低排序：下浮率越小，真实报价越高。"""
 
     return (float(bids[unit]), unit)
@@ -185,7 +184,7 @@ def score_key(unit: int, scores: dict[int, float]) -> tuple[float, int]:
 
 def lowest_price_units(
     units: list[int],
-    bids: list[float | None],
+    bids: list[float],
     count: int,
 ) -> list[int]:
     """真实报价最低的若干单位，也就是下浮率最高的若干单位。"""
@@ -195,7 +194,7 @@ def lowest_price_units(
 
 def highest_price_units(
     units: list[int],
-    bids: list[float | None],
+    bids: list[float],
     count: int,
 ) -> list[int]:
     """真实报价最高的若干单位，也就是下浮率最低的若干单位。"""
@@ -203,15 +202,15 @@ def highest_price_units(
     return sorted(units, key=lambda unit: higher_quote_key(unit, bids))[:count]
 
 
-def validate_bids(raw_bids: list[float]) -> list[float | None]:
+def validate_bids(raw_bids: list[float]) -> list[float]:
     if len(raw_bids) != NUM_UNITS:
         raise ValueError(f"必须提供 {NUM_UNITS} 个报价下浮率，当前为 {len(raw_bids)} 个。")
 
-    bids: list[float | None] = [None] + [float(value) for value in raw_bids]
+    bids: list[float] = [math.nan] + [float(value) for value in raw_bids]
     return bids
 
 
-def bid_bound_warnings(bids: list[float | None]) -> list[str]:
+def bid_bound_warnings(bids: list[float]) -> list[str]:
     warnings: list[str] = []
     for unit in all_units():
         lower, upper = BID_BOUNDS[unit]
@@ -223,7 +222,7 @@ def bid_bound_warnings(bids: list[float | None]) -> list[str]:
     return warnings
 
 
-def random_bids(rng: random.Random) -> list[float | None]:
+def random_bids(rng: random.Random) -> list[float]:
     values = []
     for unit in all_units():
         lower, upper = BID_BOUNDS[unit]
@@ -231,7 +230,7 @@ def random_bids(rng: random.Random) -> list[float | None]:
     return validate_bids(values)
 
 
-def midpoint_bids() -> list[float | None]:
+def midpoint_bids() -> list[float]:
     values = [(lower + upper) / 2 for lower, upper in BID_BOUNDS.values()]
     return validate_bids(values)
 
@@ -257,7 +256,7 @@ def scenario_display(scenario: Scenario) -> str:
 
 def calculate_business_baseline(
     qualified: list[int],
-    bids: list[float | None],
+    bids: list[float],
 ) -> tuple[float, list[int], list[int]]:
     """环节二商务推优的评标基准价 K1。"""
 
@@ -275,7 +274,7 @@ def calculate_business_baseline(
 
 def calculate_b_value(
     recommended: list[int],
-    bids: list[float | None],
+    bids: list[float],
     b2: float,
 ) -> tuple[float, float, int]:
     """环节三 B 值：推荐名单中去掉报价最高者后取均值，再加 B2。"""
@@ -291,7 +290,7 @@ def calculate_b_value(
 
 def calculate_bid_scores(
     recommended: list[int],
-    bids: list[float | None],
+    bids: list[float],
     b_value: float,
 ) -> dict[int, float]:
     """环节三总投标报价得分。"""
@@ -353,7 +352,7 @@ def set_target_status_once(
 
 
 def simulate_and_log(
-    bids: list[float | None],
+    bids: list[float],
     scenario: Scenario,
     target_unit: int = TARGET_UNIT,
 ) -> SimulationResult:
@@ -639,7 +638,7 @@ def simulate_and_log(
 
 def save_simulation_log(
     result: SimulationResult,
-    bids: list[float | None],
+    bids: list[float],
     filename: str | None = None,
 ) -> Path:
     LOG_DIR.mkdir(exist_ok=True)
@@ -676,7 +675,7 @@ def save_simulation_log(
     return output_path
 
 
-def load_bids_from_json(path: Path) -> list[float | None]:
+def load_bids_from_json(path: Path) -> list[float]:
     with path.open("r", encoding="utf-8") as file:
         data = json.load(file)
 
@@ -736,7 +735,7 @@ def prompt_int(prompt: str, valid_values: list[int] | None = None) -> int:
         return value
 
 
-def prompt_bids() -> list[float | None]:
+def prompt_bids() -> list[float]:
     print("请输入 20 个下浮率，可以用逗号或空格分隔。")
     while True:
         raw = input("X1 ... X20: ").strip()
@@ -758,7 +757,7 @@ def prompt_scenario() -> Scenario:
     )
 
 
-def choose_bids(rng: random.Random) -> list[float | None]:
+def choose_bids(rng: random.Random) -> list[float]:
     while True:
         print()
         print("请选择报价来源：")
@@ -799,7 +798,7 @@ def choose_scenario(rng: random.Random) -> Scenario:
 
 def print_and_save_result(
     result: SimulationResult,
-    bids: list[float | None],
+    bids: list[float],
     save: bool = True,
     filename: str | None = None,
 ) -> None:
@@ -815,7 +814,7 @@ def print_and_save_result(
 
 
 def exact_enumeration(
-    bids: list[float | None],
+    bids: list[float],
     target_unit: int = TARGET_UNIT,
 ) -> tuple[list[str], list[SimulationResult]]:
     results: list[SimulationResult] = []
@@ -868,7 +867,7 @@ def exact_enumeration(
 def save_exact_enumeration(
     summary: list[str],
     results: list[SimulationResult],
-    bids: list[float | None],
+    bids: list[float],
     include_details: bool = False,
 ) -> Path:
     LOG_DIR.mkdir(exist_ok=True)

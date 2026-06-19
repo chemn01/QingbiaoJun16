@@ -6,8 +6,52 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import de_softmax_optimizer as optimizer
+
+
+def test_resolve_worker_count_caps_default_workers_on_windows(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(optimizer.os, "name", "nt")
+    monkeypatch.setattr(optimizer.mp, "cpu_count", lambda: 128)
+
+    actual_workers = optimizer.resolve_worker_count(-1)
+
+    assert actual_workers == optimizer.WINDOWS_MAX_POOL_WORKERS
+    assert "已从 90 降为 61" in capsys.readouterr().out
+
+
+def test_resolve_worker_count_caps_explicit_workers_on_windows(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(optimizer.os, "name", "nt")
+
+    actual_workers = optimizer.resolve_worker_count(90)
+
+    assert actual_workers == optimizer.WINDOWS_MAX_POOL_WORKERS
+    assert "已从 90 降为 61" in capsys.readouterr().out
+
+
+def test_resolve_worker_count_keeps_default_cap_on_non_windows(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(optimizer.os, "name", "posix")
+    monkeypatch.setattr(optimizer.mp, "cpu_count", lambda: 128)
+
+    actual_workers = optimizer.resolve_worker_count(-1)
+
+    assert actual_workers == optimizer.DEFAULT_MAX_WORKERS
+    assert capsys.readouterr().out == ""
+
+
+def test_resolve_worker_count_rejects_non_positive_workers() -> None:
+    with pytest.raises(ValueError, match="--workers"):
+        optimizer.resolve_worker_count(0)
 
 
 class DeSoftmaxOptimizerTests(unittest.TestCase):

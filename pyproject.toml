@@ -6,3 +6,37 @@ dependencies = [
     "numpy>=2.0.0",
     "scipy>=1.13.0",
 ]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pytest>=9.1.0",
+    "ruff>=0.15.18",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "de_softmax_optimizer.py",
+    "forward_bidding_calculator.py",
+    "validate_de_results.py",
+    "tests",
+]
+check_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unused_configs = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

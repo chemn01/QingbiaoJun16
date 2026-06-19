@@ -34,6 +34,16 @@ uv run python --version
 
 Use the same commands on the Windows CPU server and the Linux GPU server. Keep common dependencies in `pyproject.toml` with `uv add <package>`. Add GPU-specific packages only on the Linux GPU server after confirming its CUDA/PyTorch compatibility.
 
+## Quality Checks
+
+All code changes should include pytest unit tests and pass:
+
+```bash
+uv run ruff check .
+uv run mypy
+uv run pytest
+```
+
 ## Planned Workflow
 
 1. Implement and test the exact rule engine.

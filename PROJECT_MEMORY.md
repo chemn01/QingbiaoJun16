@@ -1,6 +1,6 @@
 # Project Memory
 
-Last updated: 2026-06-18
+Last updated: 2026-06-19
 
 ## Source of Truth
 
@@ -45,6 +45,7 @@ Last updated: 2026-06-18
 - `tests/test_de_softmax_optimizer.py` contains smoke and mapping tests for the optimizer.
 - `tests/test_validate_de_results.py` contains candidate loading, mapping, count, refinement-selection, and evaluator-consistency tests for the validator.
 - Local `uv` environment exists at `.venv`; use `uv --cache-dir .uv-cache ...` locally because the sandbox blocks `~/.cache/uv`.
+- Quality gate for all code changes: add/maintain pytest unit tests and pass `uv run ruff check .`, `uv run mypy`, and `uv run pytest`.
 - Long-term project files now include:
   - `PROJECT_BOOTSTRAP_PROMPT.md` for new-chat setup.
   - `PROJECT_MEMORY.md` for stable project state.
