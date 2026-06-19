@@ -13,6 +13,7 @@ import csv
 import json
 import math
 import multiprocessing as mp
+import sys
 import time
 from collections import Counter
 from collections.abc import Iterable, Sequence
@@ -32,6 +33,7 @@ DEFAULT_TOP = 20
 DEFAULT_REFINE_TOP = 5
 DEFAULT_SEED = 42
 DEFAULT_OUTPUT_DIR = Path("de_softmax_validation_results")
+WINDOWS_MAX_POOL_WORKERS = 60
 
 Q_VALUES = [int(value) for value in optimizer.Q_VALUES]
 B2_VALUES = [float(value) for value in optimizer.B2_VALUES]
@@ -624,6 +626,18 @@ def chunk_env_matrix(env_matrix: np.ndarray, chunk_size: int) -> list[np.ndarray
     ]
 
 
+def resolve_worker_count(workers: int, task_count: int, phase: str) -> int:
+    requested_workers = min(mp.cpu_count(), task_count) if workers == -1 else int(workers)
+    requested_workers = min(requested_workers, task_count)
+    if sys.platform == "win32" and requested_workers > WINDOWS_MAX_POOL_WORKERS:
+        print(
+            f"[{phase}] Windows worker cap: requested {requested_workers}, "
+            f"using {WINDOWS_MAX_POOL_WORKERS} to avoid multiprocessing handle limits"
+        )
+        return WINDOWS_MAX_POOL_WORKERS
+    return requested_workers
+
+
 def evaluate_candidates(
     candidates: list[Candidate],
     samples: int,
@@ -658,7 +672,7 @@ def evaluate_candidates(
             if task_index % max(1, len(tasks) // 10) == 0 or task_index == len(tasks):
                 print(f"[{phase}] progress {task_index}/{len(tasks)} tasks")
     else:
-        actual_workers = min(mp.cpu_count(), len(tasks)) if workers == -1 else int(workers)
+        actual_workers = resolve_worker_count(workers, len(tasks), phase)
         with mp.Pool(processes=actual_workers) as pool:
             for task_index, (candidate_index, partial) in enumerate(
                 pool.imap_unordered(evaluate_candidate_chunk, tasks),
@@ -891,7 +905,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--refine-top", type=int, default=DEFAULT_REFINE_TOP)
     parser.add_argument("--refine-samples", type=int, default=DEFAULT_REFINE_SAMPLES)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    parser.add_argument("--workers", type=int, default=-1, help="-1 uses all available CPUs.")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=-1,
+        help="-1 uses all available CPUs; capped at 60 on Windows.",
+    )
     parser.add_argument("--chunk-size", type=int, default=512)
     return parser.parse_args()
 
