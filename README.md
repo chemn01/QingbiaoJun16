@@ -57,3 +57,4 @@ uv run pytest
 - Use round-half-up for rule-critical rounding unless a different convention is confirmed.
 - Test tie-breaking explicitly.
 - Prefer exact enumeration over Monte Carlo when feasible.
+- In the final winner stage, first choose the closest bidder among discount rates `X_i > K`; if none exist, choose the bidder with the smallest `|X_i - K|`.

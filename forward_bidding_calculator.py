@@ -9,7 +9,8 @@
 说明：
 - X_i 是下浮率，不是真实报价。X_i 越大，真实报价越低。
 - “报价最低/报价低于 K”在程序中按“下浮率更高/下浮率 > K”处理。
-- 环节五按用户确认的规则实现：只有 X_i > K 的定标候选人参与中标选择。
+- 环节五先在 X_i > K 的定标候选人中选最接近 K 的；若没有 X_i > K，
+  则在全部定标候选人中选 |X_i - K| 最小的。
 """
 
 from __future__ import annotations
@@ -200,6 +201,21 @@ def highest_price_units(
     """真实报价最高的若干单位，也就是下浮率最低的若干单位。"""
 
     return sorted(units, key=lambda unit: higher_quote_key(unit, bids))[:count]
+
+
+def final_stage_selection_key(unit: int, bids: list[float], final_k: float) -> tuple[int, float, int]:
+    """环节五排序：优先 X_i > K；否则按绝对差值兜底。"""
+
+    gap = float(bids[unit]) - final_k
+    if gap > 0:
+        return (0, gap, unit)
+    return (1, abs(gap), unit)
+
+
+def final_stage_winner(finalists: list[int], bids: list[float], final_k: float) -> int | None:
+    if not finalists:
+        return None
+    return sorted(finalists, key=lambda unit: final_stage_selection_key(unit, bids, final_k))[0]
 
 
 def validate_bids(raw_bids: list[float]) -> list[float]:
@@ -557,48 +573,59 @@ def simulate_and_log(
     log("--- 环节五：中标（K1 + K2）---")
     final_k1 = mean(float(bids[unit]) for unit in finalists)
     final_k = final_k1 + scenario.k2
-    eligible_winners = [unit for unit in finalists if float(bids[unit]) > final_k]
-    ordered_eligible = sorted(
-        eligible_winners,
-        key=lambda unit: (float(bids[unit]) - final_k, unit),
-    )
-    final_winner = ordered_eligible[0] if ordered_eligible else None
+    has_low_quote = any(float(bids[unit]) > final_k for unit in finalists)
+    final_winner = final_stage_winner(finalists, bids, final_k)
 
     log(f"K1（定标候选人下浮率均值）= {final_k1:.4f}")
     log(f"K = K1 + K2 = {final_k1:.4f} + {scenario.k2:g} = {final_k:.4f}")
-    log("按已确认规则：只有 X_i > K 的单位视为真实报价低于 K，可参与最后中标选择。")
+    log("按当前规则：优先在 X_i > K（真实报价低于 K）的单位中选最接近 K 的。")
+    log("若没有 X_i > K 的单位，则在全部定标候选人中按 |X_i-K| 最小选择。")
 
-    log(f"{'单位':<12} {'下浮率':>8} {'X-K':>10} {'是否X>K':>10}  结果")
-    log("-" * 62)
-    for unit in sorted(finalists, key=lambda u: (abs(float(bids[u]) - final_k), -float(bids[u]), u)):
-        eligible_text = "是" if float(bids[unit]) > final_k else "否"
+    log(f"{'单位':<12} {'下浮率':>8} {'X-K':>10} {'选择组':>10}  结果")
+    log("-" * 64)
+    for unit in sorted(finalists, key=lambda u: final_stage_selection_key(u, bids, final_k)):
+        gap = float(bids[unit]) - final_k
+        if gap > 0:
+            selection_text = "优先"
+        elif has_low_quote:
+            selection_text = "不参与"
+        else:
+            selection_text = "兜底"
         result_text = "[中标]" if unit == final_winner else ""
         mark = "(*)" if unit == target_unit else ""
         log(
             f"{unit_label(unit):<12} {float(bids[unit]):>8.2f} "
-            f"{float(bids[unit]) - final_k:>10.2f} {eligible_text:>10}  "
+            f"{gap:>10.2f} {selection_text:>10}  "
             f"{result_text} {mark}"
         )
 
     if final_winner is None:
-        log("[无中标人] 没有定标候选人的 X_i > K，程序不自动改用绝对值兜底。")
+        log("[异常] 定标候选人为空或环节五无法产生中标人。")
         if target_unit in finalists and target_status is None:
             target_status, target_reason = set_target_status_once(
                 target_status,
                 target_reason,
-                "环节五：无低于K候选人",
-                "没有定标候选人的真实报价低于 K（即没有 X_i > K）",
+                "环节五：未中标",
+                "环节五无法产生中标人",
             )
     elif final_winner == target_unit:
         log(f"[成功] {unit_label(target_unit)} 中标！")
         target_status = "中标"
-        target_reason = "报价下浮率高于 K，且与 K 的正向差值最小"
-    elif target_unit in finalists and target_status is None:
-        if float(bids[target_unit]) <= final_k:
-            reason = f"X5={float(bids[target_unit]):.2f} 不大于 K={final_k:.2f}，真实报价未低于 K"
+        if has_low_quote:
+            target_reason = "报价下浮率高于 K，且与 K 的正向差值最小"
         else:
-            target_gap = float(bids[target_unit]) - final_k
-            winner_gap = float(bids[final_winner]) - final_k
+            target_reason = "无候选人满足 X_i > K，按与 K 的绝对差值最小中标"
+    elif target_unit in finalists and target_status is None:
+        target_gap = float(bids[target_unit]) - final_k
+        winner_gap = float(bids[final_winner]) - final_k
+        if not has_low_quote:
+            reason = (
+                f"无候选人满足 X_i > K；X5 与 K 的绝对差值为 {abs(target_gap):.2f}，"
+                f"中标者绝对差值为 {abs(winner_gap):.2f}"
+            )
+        elif target_gap <= 0:
+            reason = f"存在 X_i > K 的优先候选人；X5={float(bids[target_unit]):.2f} 不大于 K={final_k:.2f}"
+        else:
             reason = (
                 f"X5 与 K 的正向差值为 {target_gap:.2f}，"
                 f"中标者差值为 {winner_gap:.2f}"
@@ -617,7 +644,7 @@ def simulate_and_log(
     log("最终结果")
     log("=" * 72)
     if final_winner is None:
-        log("按当前环节五规则，本场没有产生中标人。")
+        log("本场未产生中标人（定标候选人为空或异常）。")
     else:
         log(f"中标人: {unit_label(final_winner)}，下浮率={float(bids[final_winner]):.2f}")
 

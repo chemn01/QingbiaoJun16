@@ -79,6 +79,7 @@ Rule implementation priorities:
   low-price elimination count in {1, 2},
   N in {3, 4, 5},
   K2 in {0, 0.25, 0.5}.
+- In the final winner stage, compute K = K1 + K2, first choose the closest finalist with X_i > K, and if no finalist has X_i > K, choose the finalist with the smallest |X_i-K|.
 - If exact enumeration is feasible, compute exact winning probability by averaging over all random combinations with their stated probabilities.
 - If simulation is used, fix random seeds and report uncertainty.
 
@@ -88,7 +89,7 @@ Planned solution routes:
 - `de_softmax_optimizer.py` is the first implemented DE optimizer.
 - Optimize the 12 adjustable X variables within their known per-unit ranges.
 - Primary objective: maximize X5's winning probability unless clarified otherwise.
-- The current optimizer uses a surrogate objective: hard official stages locate the first X5 failure, then a soft failure-margin loss is applied; final winning uses a one-sided softmax that respects X_i > K.
+- The current optimizer uses a surrogate objective: hard official stages locate the first X5 failure, then a soft failure-margin loss is applied; final winning uses a softmax matching the X_i > K priority plus |X_i-K| fallback rule.
 - The surrogate objective is only for candidate generation. Compare checkpoints/results with true winning probability in a separate validation program.
 - `validate_de_results.py` is the implemented true-probability validator for DE outputs.
 - Validator default flow: read `best_result.json` and `checkpoint_iter_*.json`, validate the top 20 surrogate candidates with 32768 Sobol samples over the 8 non-adjustable units, exactly enumerate all 324 discrete scenarios per sample, then refine the top 5 true-probability candidates with 65536 samples.

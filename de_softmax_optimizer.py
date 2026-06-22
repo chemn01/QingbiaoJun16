@@ -7,7 +7,7 @@ X3, X5, X6, X7, X9, X10, X11, X13, X16, X17, X19, X20。
 目标函数不是真实中标概率，而是一个可优化的近似损失：
 - 按正式规则硬执行流程，定位 X5 最早失败环节。
 - 在失败环节用连续距离惩罚提供优化信号。
-- 环节五使用遵守 X_i > K 的 one-sided softmax 距离。
+- 环节五 softmax 先尊重 X_i > K 的优先规则；若无人满足，则按 |X_i-K| 兜底。
 """
 
 from __future__ import annotations
@@ -500,7 +500,7 @@ def score_margin_to_finalist(
     return max(0.0, float(total_scores[threshold_unit] - total_scores[target_unit]))
 
 
-def one_sided_softmax_probability(
+def final_stage_softmax_probability(
     finalists: list[int],
     bids: np.ndarray,
     final_k: float,
@@ -509,35 +509,49 @@ def one_sided_softmax_probability(
     invalid_cost: float = 10.0,
 ) -> float:
     """
-    环节五 softmax：只有 X_i > K 的单位有正常 winner cost。
+    环节五 softmax 近似。
 
-    合格单位 cost = X_i - K，越小越好；不合格单位 cost 加 invalid_cost。
+    若存在 X_i > K 的单位，只在这些优先候选人中正常比较 X_i-K，
+    其他单位加 invalid_cost。若不存在 X_i > K，则按 |X_i-K| 兜底。
     """
 
+    if target_unit not in finalists or not finalists:
+        return 0.0
+
+    has_low_quote = any(float(bids[unit]) > final_k for unit in finalists)
     costs = []
     for unit in finalists:
         gap = float(bids[unit]) - final_k
-        if gap > 0:
-            cost = gap
+        if has_low_quote:
+            if gap > 0:
+                cost = gap
+            else:
+                cost = invalid_cost + abs(gap)
         else:
-            cost = invalid_cost + abs(gap)
+            cost = abs(gap)
         costs.append(cost)
 
     cost_array = np.array(costs, dtype=float)
     shifted = cost_array - float(cost_array.min())
     exp_scores = np.exp(-shifted / max(temperature, 1e-12))
     denominator = float(exp_scores.sum())
-    if denominator <= 0 or target_unit not in finalists:
+    if denominator <= 0:
         return 0.0
     target_index = finalists.index(target_unit)
     return float(exp_scores[target_index] / denominator)
 
 
+def final_stage_selection_key(unit: int, bids: np.ndarray, final_k: float) -> tuple[int, float, int]:
+    gap = float(bids[unit]) - final_k
+    if gap > 0:
+        return (0, gap, unit)
+    return (1, abs(gap), unit)
+
+
 def hard_winner(finalists: list[int], bids: np.ndarray, final_k: float) -> int | None:
-    eligible = [unit for unit in finalists if float(bids[unit]) > final_k]
-    if not eligible:
+    if not finalists:
         return None
-    return sorted(eligible, key=lambda unit: (float(bids[unit]) - final_k, unit))[0]
+    return sorted(finalists, key=lambda unit: final_stage_selection_key(unit, bids, final_k))[0]
 
 
 def evaluate_scenario_loss(
@@ -656,7 +670,7 @@ def evaluate_scenario_loss(
         if winner == TARGET_UNIT:
             k2_losses.append(0.0)
             continue
-        p_x5 = one_sided_softmax_probability(
+        p_x5 = final_stage_softmax_probability(
             finalists,
             bids,
             final_k,
@@ -985,7 +999,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--price-scale", type=float, default=0.25, help="报价距离惩罚 scale")
     parser.add_argument("--score-scale", type=float, default=2.0, help="清标分距离惩罚 scale")
     parser.add_argument("--temperature", type=float, default=0.1, help="环节五 softmax 温度")
-    parser.add_argument("--invalid-cost", type=float, default=10.0, help="X_i <= K 的 softmax 额外 cost")
+    parser.add_argument(
+        "--invalid-cost",
+        type=float,
+        default=10.0,
+        help="存在 X_i > K 时，X_i <= K 的 softmax 额外 cost",
+    )
     parser.add_argument("--no-polish", action="store_true", help="关闭 scipy 最后局部 polish")
     parser.add_argument("--quiet", action="store_true", help="关闭 scipy 每代输出")
     return parser.parse_args()

@@ -66,14 +66,14 @@ class DeSoftmaxOptimizerTests(unittest.TestCase):
         for index, unit in enumerate(optimizer.NON_ADJUSTABLE_UNITS):
             self.assertEqual(bids[unit], env_vars[index])
 
-    def test_one_sided_softmax_penalizes_units_not_above_k(self) -> None:
+    def test_final_stage_softmax_penalizes_units_not_above_k_when_priority_exists(self) -> None:
         bids = np.zeros(optimizer.NUM_UNITS + 1, dtype=float)
         bids[5] = 18.9
         bids[6] = 19.1
         bids[7] = 19.4
         finalists = [5, 6, 7]
 
-        p_not_eligible = optimizer.one_sided_softmax_probability(
+        p_not_eligible = optimizer.final_stage_softmax_probability(
             finalists,
             bids,
             final_k=19.0,
@@ -83,7 +83,7 @@ class DeSoftmaxOptimizerTests(unittest.TestCase):
         self.assertLess(p_not_eligible, 1e-6)
 
         bids[5] = 19.05
-        p_eligible = optimizer.one_sided_softmax_probability(
+        p_eligible = optimizer.final_stage_softmax_probability(
             finalists,
             bids,
             final_k=19.0,
@@ -91,6 +91,24 @@ class DeSoftmaxOptimizerTests(unittest.TestCase):
             invalid_cost=10.0,
         )
         self.assertGreater(p_eligible, 0.5)
+
+    def test_final_stage_falls_back_to_absolute_distance_when_no_unit_above_k(self) -> None:
+        bids = np.zeros(optimizer.NUM_UNITS + 1, dtype=float)
+        bids[5] = 18.9
+        bids[6] = 18.7
+        bids[7] = 18.1
+        finalists = [5, 6, 7]
+
+        self.assertEqual(optimizer.hard_winner(finalists, bids, final_k=19.0), 5)
+
+        p_fallback = optimizer.final_stage_softmax_probability(
+            finalists,
+            bids,
+            final_k=19.0,
+            temperature=0.1,
+            invalid_cost=10.0,
+        )
+        self.assertGreater(p_fallback, 0.8)
 
     def test_smoke_run_saves_checkpoint_and_final_result(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

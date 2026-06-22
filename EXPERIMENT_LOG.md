@@ -41,3 +41,11 @@ Notes:
 
 - No full high-precision optimization run has been recorded yet.
 - No full high-precision validation run on a real optimizer output directory has been recorded yet.
+
+## 2026-06-22
+
+Rule update implementation:
+
+- Updated code to match the revised `qingbiao.md` final winner rule: after `K = K1 + K2`, prioritize finalists with `X_i > K`; if none exist, select the finalist with the smallest `|X_i-K|`.
+- Updated the forward calculator, DE validation evaluator, DE surrogate objective, and tests.
+- Existing generated optimizer and validation outputs were produced under the previous final-stage interpretation and should be regenerated before drawing conclusions from their probabilities.

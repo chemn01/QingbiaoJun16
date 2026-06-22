@@ -1,6 +1,6 @@
 # Project Memory
 
-Last updated: 2026-06-19
+Last updated: 2026-06-22
 
 ## Source of Truth
 
@@ -35,7 +35,7 @@ Last updated: 2026-06-19
   - Treats non-adjustable units as a Sobol/CRN environment sampled from their known ranges.
   - Default CRN sample count is now 8192 for formal candidate generation.
   - Uses hard stage flow to locate where `X5` fails, then applies a soft failure-margin loss.
-  - Uses a one-sided softmax in the final winning stage that respects the rule `X_i > K`.
+  - Uses a final-stage softmax matching the current rule: prioritize finalists with `X_i > K`, then fall back to the smallest `|X_i-K|` if none exist.
   - Saves checkpoints every `checkpoint_every` iterations; default is every 50 iterations.
 - `validate_de_results.py` validates optimizer checkpoints/results against the true current rules.
   - It reads `best_result.json` and `checkpoint_iter_*.json` from an optimizer result directory.
@@ -62,9 +62,10 @@ Last updated: 2026-06-19
 - Tie-breaking and the distinction between quoted price and discount rate are high-risk parts of the implementation and need tests.
 - The optimizer's objective is not true winning probability. Low objective values should be treated as candidate-generation signals, then checked by `validate_de_results.py`.
 - The optimizer was committed and pushed to GitHub as `48f0953 Add differential evolution softmax optimizer`.
+- On 2026-06-22, `qingbiao.md` changed the final winner stage so that a winner is still selected when no finalist has `X_i > K`; existing generated DE/validation artifacts from the older final-stage rule are stale until rerun.
 
 ## Open Questions
 
-- Run a first full DE optimization with `samples=8192` and record results.
-- Run high-precision validation on the full optimizer output directory and compare surrogate objective ranking against true `X5` winning probability.
+- Rerun DE optimization with `samples=8192` under the 2026-06-22 final-stage fallback rule and record results.
+- Rerun high-precision validation on the optimizer output directory and compare surrogate objective ranking against true `X5` winning probability.
 - Add broader tests for the official rule engine and tie-breaking before relying on long optimization runs.

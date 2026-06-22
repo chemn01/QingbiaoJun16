@@ -90,6 +90,18 @@ class ValidateDeResultsTests(unittest.TestCase):
             self.assertEqual(fast.winner, logged.winner)
             self.assertEqual(fast.target_status, logged.target_status)
 
+    def test_final_stage_fallback_winner_matches_forward_helper(self) -> None:
+        raw_bids = [10.0] * optimizer.NUM_UNITS
+        raw_bids[4] = 18.9
+        raw_bids[5] = 18.7
+        raw_bids[6] = 18.1
+        forward_bids = forward.validate_bids(raw_bids)
+        fast_bids = np.asarray([0.0] + raw_bids, dtype=float)
+        finalists = [5, 6, 7]
+
+        self.assertEqual(forward.final_stage_winner(finalists, forward_bids, final_k=19.0), 5)
+        self.assertEqual(validator.final_stage_winner(finalists, fast_bids, final_k=19.0), 5)
+
     def test_count_helpers_and_refine_selection(self) -> None:
         self.assertEqual(validator.DISCRETE_SCENARIO_COUNT, 324)
         self.assertEqual(

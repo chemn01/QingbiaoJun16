@@ -52,7 +52,6 @@ STATUS_ENTRY = "环节一：入围淘汰"
 STATUS_RECOMMENDATION = "环节二：推优淘汰"
 STATUS_EXCLUDED = "环节四：报价最低剔除"
 STATUS_SCORE = "环节四：清标得分不足"
-STATUS_NO_ELIGIBLE_WINNER = "环节五：无低于K候选人"
 STATUS_NOT_WINNER = "环节五：未中标"
 STATUS_WINNER = "中标"
 
@@ -206,6 +205,19 @@ def higher_quote_key(unit: int, bids: np.ndarray) -> tuple[float, int]:
 
 def score_key(unit: int, scores: dict[int, float]) -> tuple[float, int]:
     return (-scores[unit], unit)
+
+
+def final_stage_selection_key(unit: int, bids: np.ndarray, final_k: float) -> tuple[int, float, int]:
+    gap = float(bids[unit]) - final_k
+    if gap > 0:
+        return (0, gap, unit)
+    return (1, abs(gap), unit)
+
+
+def final_stage_winner(finalists: list[int], bids: np.ndarray, final_k: float) -> int | None:
+    if not finalists:
+        return None
+    return sorted(finalists, key=lambda unit: final_stage_selection_key(unit, bids, final_k))[0]
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -449,17 +461,9 @@ def evaluate_rule_scenario(
 
     final_k1 = mean(float(bids[unit]) for unit in finalists)
     final_k = float(final_k1 + scenario.k2)
-    eligible_winners = [unit for unit in finalists if float(bids[unit]) > final_k]
-    final_winner = (
-        sorted(eligible_winners, key=lambda unit: (float(bids[unit]) - final_k, unit))[0]
-        if eligible_winners
-        else None
-    )
+    final_winner = final_stage_winner(finalists, bids, final_k)
 
-    if final_winner is None:
-        if target_unit in finalists:
-            target_status = set_status_once(target_status, STATUS_NO_ELIGIBLE_WINNER)
-    elif final_winner == target_unit:
+    if final_winner == target_unit:
         target_status = STATUS_WINNER
     elif target_unit in finalists:
         target_status = set_status_once(target_status, STATUS_NOT_WINNER)
