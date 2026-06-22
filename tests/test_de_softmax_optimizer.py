@@ -66,6 +66,13 @@ class DeSoftmaxOptimizerTests(unittest.TestCase):
         for index, unit in enumerate(optimizer.NON_ADJUSTABLE_UNITS):
             self.assertEqual(bids[unit], env_vars[index])
 
+    def test_bid_summaries_round_to_two_decimals(self) -> None:
+        decision_vars = np.full(len(optimizer.ADJUSTABLE_UNITS), 18.766)
+
+        summary = optimizer.optimized_bid_summary(decision_vars)
+
+        self.assertEqual(summary["X3"], 18.77)
+
     def test_final_stage_softmax_penalizes_units_not_above_k_when_priority_exists(self) -> None:
         bids = np.zeros(optimizer.NUM_UNITS + 1, dtype=float)
         bids[5] = 18.9

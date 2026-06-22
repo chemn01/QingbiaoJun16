@@ -32,6 +32,7 @@ from scipy.stats import qmc
 
 NUM_UNITS = 20
 TARGET_UNIT = 5
+OUTPUT_DECIMAL_PLACES = 2
 
 A_SCORES = np.array(
     [
@@ -297,12 +298,12 @@ def build_bid_vector(decision_vars: Iterable[float], env_vars: Iterable[float]) 
 def representative_bid_summary(decision_vars: Iterable[float], context: CRNContext) -> dict[str, float]:
     env_means = context.env_matrix.mean(axis=0)
     bids = build_bid_vector(decision_vars, env_means)
-    return {unit_key(unit): round(float(bids[unit]), 4) for unit in range(1, NUM_UNITS + 1)}
+    return {unit_key(unit): round(float(bids[unit]), OUTPUT_DECIMAL_PLACES) for unit in range(1, NUM_UNITS + 1)}
 
 
 def optimized_bid_summary(decision_vars: Iterable[float]) -> dict[str, float]:
     return {
-        unit_key(unit): round(float(value), 4)
+        unit_key(unit): round(float(value), OUTPUT_DECIMAL_PLACES)
         for unit, value in zip(ADJUSTABLE_UNITS, decision_vars)
     }
 
@@ -312,9 +313,9 @@ def env_summary(context: CRNContext) -> dict[str, dict[str, float]]:
     for col, unit in enumerate(NON_ADJUSTABLE_UNITS):
         values = context.env_matrix[:, col]
         summary[unit_key(unit)] = {
-            "min": round(float(values.min()), 4),
-            "max": round(float(values.max()), 4),
-            "mean": round(float(values.mean()), 4),
+            "min": round(float(values.min()), OUTPUT_DECIMAL_PLACES),
+            "max": round(float(values.max()), OUTPUT_DECIMAL_PLACES),
+            "mean": round(float(values.mean()), OUTPUT_DECIMAL_PLACES),
         }
     return summary
 
@@ -778,10 +779,10 @@ def save_result_text(path: Path, payload: dict[str, Any]) -> None:
             file.write(f"收敛信息: {payload['message']}\n")
         file.write("\n最优可调变量:\n")
         for name, value in payload["best_adjustable_bids"].items():
-            file.write(f"  {name:<4} = {float(value):.4f}\n")
+            file.write(f"  {name:<4} = {float(value):.{OUTPUT_DECIMAL_PLACES}f}\n")
         file.write("\n用 CRN 环境均值补齐的 20 个报价摘要:\n")
         for name, value in payload["full_bids_at_crn_env_mean"].items():
-            file.write(f"  {name:<4} = {float(value):.4f}\n")
+            file.write(f"  {name:<4} = {float(value):.{OUTPUT_DECIMAL_PLACES}f}\n")
         file.write("\n注意: 该目标函数是中标概率近似，不是真实中标概率。\n")
 
 

@@ -34,6 +34,7 @@ DEFAULT_REFINE_TOP = 5
 DEFAULT_SEED = 42
 DEFAULT_OUTPUT_DIR = Path("de_softmax_validation_results")
 WINDOWS_MAX_POOL_WORKERS = 60
+OUTPUT_DECIMAL_PLACES = 2
 
 Q_VALUES = [int(value) for value in optimizer.Q_VALUES]
 B2_VALUES = [float(value) for value in optimizer.B2_VALUES]
@@ -173,6 +174,18 @@ def value_key(value: float | int) -> str:
     if isinstance(value, float):
         return f"{value:g}"
     return str(value)
+
+
+def round_output_decimal(value: float) -> float:
+    return round(float(value), OUTPUT_DECIMAL_PLACES)
+
+
+def format_output_decimal(value: float) -> str:
+    return f"{float(value):.{OUTPUT_DECIMAL_PLACES}f}"
+
+
+def format_output_percent(value: float) -> str:
+    return f"{float(value):.{OUTPUT_DECIMAL_PLACES}%}"
 
 
 def is_power_of_two(value: int) -> bool:
@@ -725,17 +738,17 @@ def result_to_row(result: ValidationResult) -> dict[str, Any]:
         "samples": result.samples,
         "total_scenarios": result.total_scenarios,
         "x5_wins": result.target_wins,
-        "x5_win_probability": result.target_win_probability,
+        "x5_win_probability": format_output_decimal(result.target_win_probability),
         "standard_error": result.standard_error,
         "ci95_half_width": result.ci95_half_width,
     }
 
     for key, value in result.adjustable_bids.items():
-        row[f"bid_{key}"] = value
+        row[f"bid_{key}"] = format_output_decimal(value)
 
     for dimension, values in result.marginal_probabilities.items():
         for option_value, stats in values.items():
-            row[f"{dimension}_{option_value}_win_probability"] = stats["win_probability"]
+            row[f"{dimension}_{option_value}_win_probability"] = format_output_decimal(stats["win_probability"])
 
     for winner, stats in result.winner_distribution.items():
         row[f"winner_{winner}_rate"] = stats["rate"]
@@ -763,6 +776,26 @@ def write_csv(path: Path, results: list[ValidationResult]) -> None:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     with path.open("w", encoding="utf-8") as file:
         json.dump(as_jsonable(payload), file, ensure_ascii=False, indent=2)
+
+
+def result_to_json_dict(result: ValidationResult) -> dict[str, Any]:
+    payload = dict(result.__dict__)
+    payload["target_win_probability"] = round_output_decimal(result.target_win_probability)
+    payload["adjustable_bids"] = {
+        key: round_output_decimal(value)
+        for key, value in result.adjustable_bids.items()
+    }
+    payload["marginal_probabilities"] = {
+        dimension: {
+            option_value: {
+                **stats,
+                "win_probability": round_output_decimal(stats["win_probability"]),
+            }
+            for option_value, stats in values.items()
+        }
+        for dimension, values in result.marginal_probabilities.items()
+    }
+    return payload
 
 
 def final_results_by_candidate(results: list[ValidationResult]) -> list[ValidationResult]:
@@ -799,8 +832,8 @@ def write_report(path: Path, results: list[ValidationResult], config: dict[str, 
             file.write(
                 f"{rank:>2}. {result.candidate_name:<24} "
                 f"phase={result.phase:<7} "
-                f"P(X5中标)={result.target_win_probability:.6%} "
-                f"95%CI约±{ci:.4%} "
+                f"P(X5中标)={format_output_percent(result.target_win_probability)} "
+                f"95%CI约±{format_output_percent(ci)} "
                 f"samples={result.samples} "
                 f"objective={result.objective_value:.8f}\n"
             )
@@ -810,7 +843,7 @@ def write_report(path: Path, results: list[ValidationResult], config: dict[str, 
             file.write("\n最佳候选可调报价\n")
             file.write("-" * 72 + "\n")
             for key, value in best.adjustable_bids.items():
-                file.write(f"  {key:<4} = {value:.4f}\n")
+                file.write(f"  {key:<4} = {format_output_decimal(value)}\n")
 
             file.write("\n最佳候选 X5 状态分布\n")
             file.write("-" * 72 + "\n")
@@ -820,7 +853,7 @@ def write_report(path: Path, results: list[ValidationResult], config: dict[str, 
             ):
                 file.write(
                     f"  {status:<20} {int(stats['count']):>10} "
-                    f"({stats['rate']:.4%})\n"
+                    f"({format_output_percent(stats['rate'])})\n"
                 )
 
             file.write("\n最佳候选中标人分布（非零项）\n")
@@ -833,7 +866,7 @@ def write_report(path: Path, results: list[ValidationResult], config: dict[str, 
                     continue
                 file.write(
                     f"  {winner:<10} {int(stats['count']):>10} "
-                    f"({stats['rate']:.4%})\n"
+                    f"({format_output_percent(stats['rate'])})\n"
                 )
 
 
@@ -888,8 +921,11 @@ def run_validation(args: argparse.Namespace) -> list[ValidationResult]:
         json_path,
         {
             "config": config,
-            "results": [result.__dict__ for result in all_results],
-            "final_ranking": [result.__dict__ for result in final_results_by_candidate(all_results)],
+            "results": [result_to_json_dict(result) for result in all_results],
+            "final_ranking": [
+                result_to_json_dict(result)
+                for result in final_results_by_candidate(all_results)
+            ],
         },
     )
     write_report(report_path, all_results, config)

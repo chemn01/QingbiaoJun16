@@ -476,9 +476,9 @@ def simulate_and_log(
     log("--- 环节三：清标得分 ---")
     b_value, b1, removed_for_b = calculate_b_value(recommended, bids, scenario.b2)
     log(
-        f"B1: 去掉报价最高（下浮率最低）的 {unit_label(removed_for_b)} 后均值={b1:.4f}"
+        f"B1: 去掉报价最高（下浮率最低）的 {unit_label(removed_for_b)} 后均值={b1:.2f}"
     )
-    log(f"B = B1 + B2 = {b1:.4f} + {scenario.b2:g} = {b_value:.4f}")
+    log(f"B = B1 + B2 = {b1:.2f} + {scenario.b2:g} = {b_value:.2f}")
 
     bid_scores = calculate_bid_scores(recommended, bids, b_value)
     fulfillment_scores = calculate_fulfillment_scores(recommended)
@@ -576,8 +576,8 @@ def simulate_and_log(
     has_low_quote = any(float(bids[unit]) > final_k for unit in finalists)
     final_winner = final_stage_winner(finalists, bids, final_k)
 
-    log(f"K1（定标候选人下浮率均值）= {final_k1:.4f}")
-    log(f"K = K1 + K2 = {final_k1:.4f} + {scenario.k2:g} = {final_k:.4f}")
+    log(f"K1（定标候选人下浮率均值）= {final_k1:.2f}")
+    log(f"K = K1 + K2 = {final_k1:.2f} + {scenario.k2:g} = {final_k:.2f}")
     log("按当前规则：优先在 X_i > K（真实报价低于 K）的单位中选最接近 K 的。")
     log("若没有 X_i > K 的单位，则在全部定标候选人中按 |X_i-K| 最小选择。")
 
@@ -877,7 +877,7 @@ def exact_enumeration(
     summary.append("=" * 72)
     summary.append(f"总场景数: {total}")
     summary.append(f"{unit_label(target_unit)} 中标场景数: {target_wins}")
-    summary.append(f"{unit_label(target_unit)} 中标概率: {probability:.6f}")
+    summary.append(f"{unit_label(target_unit)} 中标概率: {probability:.2%}")
     summary.append(f"无中标人场景数: {no_winner}")
     summary.append("")
     summary.append("【中标人分布】")

@@ -172,6 +172,46 @@ class ValidateDeResultsTests(unittest.TestCase):
                 [],
             )
 
+    def test_validation_outputs_round_bids_and_win_probabilities(self) -> None:
+        result = validator.ValidationResult(
+            phase="initial",
+            candidate_name="candidate",
+            source_path="candidate.json",
+            iteration=1,
+            objective_value=1.0,
+            samples=10,
+            total_scenarios=3240,
+            target_wins=400,
+            target_win_probability=0.123456,
+            standard_error=0.001234,
+            ci95_half_width=0.002468,
+            winner_distribution={},
+            status_distribution={},
+            marginal_probabilities={
+                "q": {
+                    "15": {
+                        "wins": 123,
+                        "total": 1000,
+                        "win_probability": 0.987654,
+                    },
+                },
+            },
+            adjustable_bids={"X5": 18.766},
+        )
+
+        row = validator.result_to_row(result)
+        json_payload = validator.result_to_json_dict(result)
+
+        self.assertEqual(row["x5_win_probability"], "0.12")
+        self.assertEqual(row["bid_X5"], "18.77")
+        self.assertEqual(row["q_15_win_probability"], "0.99")
+        self.assertEqual(json_payload["target_win_probability"], 0.12)
+        self.assertEqual(json_payload["adjustable_bids"]["X5"], 18.77)
+        self.assertEqual(
+            json_payload["marginal_probabilities"]["q"]["15"]["win_probability"],
+            0.99,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
