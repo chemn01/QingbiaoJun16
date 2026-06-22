@@ -7,5 +7,3 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .DS_Store
-de_softmax_results/
-de_softmax_smoke_results/
