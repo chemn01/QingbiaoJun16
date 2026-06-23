@@ -68,6 +68,33 @@ uv run python neural_surrogate.py generate --samples 131072 --seed 42 --workers 
 uv run python neural_surrogate.py train --data surrogate_runs/full_131072/data.npz --output-dir surrogate_runs/full_131072/model --epochs 200 --batch-size 4096 --device auto
 ```
 
+Soft-loss stratified data generation keeps the global `[10, 30]` training domain while enriching low-loss samples. This is the preferred next server run:
+
+```bash
+uv run python neural_surrogate.py generate-stratified \
+  --samples 262144 \
+  --seed 42 \
+  --workers 60 \
+  --pool-batch-size 8192 \
+  --max-candidate-multiplier 10 \
+  --elite-threshold 0.75 \
+  --very-low-threshold 1.25 \
+  --low-threshold 1.75 \
+  --output surrogate_runs/global_softloss_stratified_262144/data.npz
+```
+
+Train the stratified surrogate after the dataset is generated:
+
+```bash
+uv run python neural_surrogate.py train \
+  --data surrogate_runs/global_softloss_stratified_262144/data.npz \
+  --output-dir surrogate_runs/global_softloss_stratified_262144/model \
+  --epochs 200 \
+  --batch-size 4096 \
+  --seed 42 \
+  --device auto
+```
+
 Prediction expects a JSON file containing either an `X1` through `X20` object, one 20-value list, or a list of 20-value lists:
 
 ```bash
