@@ -57,6 +57,19 @@ DEFAULT_VALIDATION_FRACTION = 0.2
 DEFAULT_BATCH_SIZE = 4096
 DEFAULT_LEARNING_RATE = 3e-4
 DEFAULT_WEIGHT_DECAY = 1e-4
+STRATUM_GLOBAL_UNIFORM = "global_uniform"
+STRATUM_ELITE_LOSS = "elite_loss"
+STRATUM_VERY_LOW_LOSS = "very_low_loss"
+STRATUM_LOW_LOSS = "low_loss"
+STRATIFIED_STRATA = (
+    STRATUM_GLOBAL_UNIFORM,
+    STRATUM_ELITE_LOSS,
+    STRATUM_VERY_LOW_LOSS,
+    STRATUM_LOW_LOSS,
+)
+DEFAULT_ELITE_THRESHOLD = 0.75
+DEFAULT_VERY_LOW_THRESHOLD = 1.25
+DEFAULT_LOW_THRESHOLD = 1.75
 
 SCENARIOS = tuple(
     optimizer.Scenario(
@@ -202,23 +215,265 @@ def save_dataset(
     bids: np.ndarray,
     labels: np.ndarray,
     metadata: dict[str, Any],
+    extra_arrays: dict[str, np.ndarray] | None = None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
+    arrays: dict[str, np.ndarray] = {
+        "bids": bids.astype(np.float32),
+        "labels": labels.astype(np.float32),
+        "metadata": np.asarray(json.dumps(as_jsonable(metadata), ensure_ascii=False)),
+    }
+    if extra_arrays:
+        arrays.update(extra_arrays)
+    savez_compressed: Any = np.savez_compressed
+    savez_compressed(
         output_path,
-        bids=bids.astype(np.float32),
-        labels=labels.astype(np.float32),
-        metadata=np.asarray(json.dumps(as_jsonable(metadata), ensure_ascii=False)),
+        **arrays,
     )
 
 
-def load_dataset(path: Path) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+def load_dataset_arrays(path: Path) -> tuple[np.ndarray, np.ndarray, dict[str, Any], dict[str, np.ndarray]]:
     with np.load(path, allow_pickle=False) as data:
         bids = np.asarray(data["bids"], dtype=np.float32)
         labels = np.asarray(data["labels"], dtype=np.float32)
         metadata_raw = str(data["metadata"].item()) if "metadata" in data else "{}"
+        extras = {
+            key: np.asarray(data[key])
+            for key in data.files
+            if key not in {"bids", "labels", "metadata"}
+        }
     metadata = json.loads(metadata_raw)
+    return bids, labels, metadata, extras
+
+
+def load_dataset(path: Path) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    bids, labels, metadata, _ = load_dataset_arrays(path)
     return bids, labels, metadata
+
+
+def validate_stratified_thresholds(
+    elite_threshold: float,
+    very_low_threshold: float,
+    low_threshold: float,
+) -> None:
+    thresholds = (elite_threshold, very_low_threshold, low_threshold)
+    if any(not math.isfinite(value) for value in thresholds):
+        raise ValueError("soft-loss thresholds must be finite.")
+    if not elite_threshold < very_low_threshold < low_threshold:
+        raise ValueError("--elite-threshold must be < --very-low-threshold must be < --low-threshold.")
+
+
+def stratified_quotas(samples: int) -> dict[str, int]:
+    if samples <= 0:
+        raise ValueError("samples must be positive.")
+    low_bucket_count = samples // 10
+    return {
+        STRATUM_GLOBAL_UNIFORM: samples - 3 * low_bucket_count,
+        STRATUM_ELITE_LOSS: low_bucket_count,
+        STRATUM_VERY_LOW_LOSS: low_bucket_count,
+        STRATUM_LOW_LOSS: low_bucket_count,
+    }
+
+
+def soft_loss_stratum(
+    value: float,
+    elite_threshold: float,
+    very_low_threshold: float,
+    low_threshold: float,
+) -> str | None:
+    if value <= elite_threshold:
+        return STRATUM_ELITE_LOSS
+    if value <= very_low_threshold:
+        return STRATUM_VERY_LOW_LOSS
+    if value <= low_threshold:
+        return STRATUM_LOW_LOSS
+    return None
+
+
+def stratum_counts(stratum_ids: np.ndarray) -> dict[str, int]:
+    values, counts = np.unique(stratum_ids.astype(str), return_counts=True)
+    return {str(value): int(count) for value, count in zip(values, counts)}
+
+
+def label_summary(labels: np.ndarray) -> dict[str, float]:
+    return {
+        "min": float(labels.min()),
+        "max": float(labels.max()),
+        "mean": float(labels.mean()),
+        "std": float(labels.std()),
+    }
+
+
+def label_summary_by_stratum(labels: np.ndarray, stratum_ids: np.ndarray) -> dict[str, dict[str, float | int]]:
+    summary: dict[str, dict[str, float | int]] = {}
+    for stratum in sorted(set(stratum_ids.astype(str))):
+        mask = stratum_ids.astype(str) == stratum
+        stratum_labels = labels[mask]
+        summary[stratum] = {
+            "samples": int(stratum_labels.shape[0]),
+            **label_summary(stratum_labels),
+        }
+    return summary
+
+
+def append_stratified_rows(
+    row_store: dict[str, list[np.ndarray]],
+    label_store: dict[str, list[np.ndarray]],
+    candidates: np.ndarray,
+    candidate_labels: np.ndarray,
+    quotas_remaining: dict[str, int],
+    elite_threshold: float,
+    very_low_threshold: float,
+    low_threshold: float,
+) -> None:
+    for row, label in zip(candidates, candidate_labels):
+        stratum = soft_loss_stratum(
+            float(label),
+            elite_threshold=elite_threshold,
+            very_low_threshold=very_low_threshold,
+            low_threshold=low_threshold,
+        )
+        if stratum is None or quotas_remaining[stratum] <= 0:
+            continue
+        row_store[stratum].append(row.astype(np.float32))
+        label_store[stratum].append(np.asarray(float(label), dtype=np.float32))
+        quotas_remaining[stratum] -= 1
+
+
+def generate_stratified_dataset(
+    samples: int,
+    seed: int,
+    output_path: Path,
+    workers: int = 1,
+    pool_batch_size: int = 8192,
+    max_candidate_multiplier: int = 10,
+    elite_threshold: float = DEFAULT_ELITE_THRESHOLD,
+    very_low_threshold: float = DEFAULT_VERY_LOW_THRESHOLD,
+    low_threshold: float = DEFAULT_LOW_THRESHOLD,
+    chunksize: int = 64,
+    options: optimizer.ObjectiveOptions | None = None,
+) -> dict[str, Any]:
+    if pool_batch_size <= 0:
+        raise ValueError("--pool-batch-size must be positive.")
+    if max_candidate_multiplier <= 0:
+        raise ValueError("--max-candidate-multiplier must be positive.")
+    validate_stratified_thresholds(elite_threshold, very_low_threshold, low_threshold)
+
+    start_time = time.time()
+    objective_options = options or optimizer.ObjectiveOptions()
+    quotas = stratified_quotas(samples)
+    low_loss_strata = [STRATUM_ELITE_LOSS, STRATUM_VERY_LOW_LOSS, STRATUM_LOW_LOSS]
+
+    row_store: dict[str, list[np.ndarray]] = {stratum: [] for stratum in STRATIFIED_STRATA}
+    label_store: dict[str, list[np.ndarray]] = {stratum: [] for stratum in STRATIFIED_STRATA}
+
+    global_count = quotas[STRATUM_GLOBAL_UNIFORM]
+    if global_count > 0:
+        global_bids = sample_full_bids(samples=global_count, seed=seed, use_sobol=True)
+        global_labels = generate_labels(
+            global_bids,
+            options=objective_options,
+            workers=workers,
+            chunksize=chunksize,
+        )
+        row_store[STRATUM_GLOBAL_UNIFORM].extend(global_bids)
+        label_store[STRATUM_GLOBAL_UNIFORM].extend(
+            np.asarray(value, dtype=np.float32) for value in global_labels
+        )
+
+    quotas_remaining = {stratum: quotas[stratum] for stratum in low_loss_strata}
+    candidates_evaluated = global_count
+    max_candidates = samples * max_candidate_multiplier
+    batch_index = 0
+    while any(count > 0 for count in quotas_remaining.values()) and candidates_evaluated < max_candidates:
+        batch_size = min(pool_batch_size, max_candidates - candidates_evaluated)
+        batch_seed = seed + 1 + batch_index
+        candidate_bids = sample_full_bids(samples=batch_size, seed=batch_seed, use_sobol=True)
+        candidate_labels = generate_labels(
+            candidate_bids,
+            options=objective_options,
+            workers=workers,
+            chunksize=chunksize,
+        )
+        append_stratified_rows(
+            row_store=row_store,
+            label_store=label_store,
+            candidates=candidate_bids,
+            candidate_labels=candidate_labels,
+            quotas_remaining=quotas_remaining,
+            elite_threshold=elite_threshold,
+            very_low_threshold=very_low_threshold,
+            low_threshold=low_threshold,
+        )
+        candidates_evaluated += batch_size
+        batch_index += 1
+
+    if any(count > 0 for count in quotas_remaining.values()):
+        collected = {stratum: quotas[stratum] - quotas_remaining.get(stratum, 0) for stratum in low_loss_strata}
+        raise ValueError(
+            "Could not fill all soft-loss buckets before reaching the candidate limit. "
+            f"collected={collected}, remaining={quotas_remaining}, "
+            f"candidates_evaluated={candidates_evaluated}, max_candidates={max_candidates}"
+        )
+
+    bids_parts = []
+    label_parts = []
+    stratum_parts = []
+    for stratum in STRATIFIED_STRATA:
+        if not row_store[stratum]:
+            continue
+        bids_part = np.asarray(row_store[stratum], dtype=np.float32)
+        labels_part = np.asarray(label_store[stratum], dtype=np.float32)
+        bids_parts.append(bids_part)
+        label_parts.append(labels_part)
+        stratum_parts.append(np.full((bids_part.shape[0],), stratum, dtype="U32"))
+
+    bids = np.concatenate(bids_parts, axis=0)
+    labels = np.concatenate(label_parts, axis=0)
+    stratum_ids = np.concatenate(stratum_parts, axis=0)
+    shuffle_rng = np.random.default_rng(seed + 10_000_003)
+    order = shuffle_rng.permutation(samples)
+    bids = bids[order]
+    labels = labels[order]
+    stratum_ids = stratum_ids[order]
+
+    elapsed = time.time() - start_time
+    metadata = {
+        "samples": int(samples),
+        "seed": int(seed),
+        "use_sobol": True,
+        "dataset_type": "global_softloss_stratified",
+        "full_bid_dimension": FULL_BID_DIMENSION,
+        "full_bid_bounds": [FULL_BID_LOWER, FULL_BID_UPPER],
+        "target_unit": optimizer.unit_key(optimizer.TARGET_UNIT),
+        "label": "average_de_soft_loss_over_108_discrete_scenarios",
+        "screening_signal": "soft_loss_label",
+        "scenario_count": len(SCENARIOS),
+        "k2_mode": "evaluate_scenario_loss_averages_all_k2_values",
+        "objective_options": options_to_kwargs(objective_options),
+        "thresholds": {
+            STRATUM_ELITE_LOSS: float(elite_threshold),
+            STRATUM_VERY_LOW_LOSS: float(very_low_threshold),
+            STRATUM_LOW_LOSS: float(low_threshold),
+        },
+        "quotas": quotas,
+        "stratum_counts": stratum_counts(stratum_ids),
+        "candidates_evaluated": int(candidates_evaluated),
+        "max_candidates": int(max_candidates),
+        "pool_batch_size": int(pool_batch_size),
+        "max_candidate_multiplier": int(max_candidate_multiplier),
+        "elapsed_seconds": elapsed,
+        "label_summary": label_summary(labels),
+        "label_summary_by_stratum": label_summary_by_stratum(labels, stratum_ids),
+    }
+    save_dataset(
+        output_path,
+        bids,
+        labels,
+        metadata,
+        extra_arrays={"stratum_id": stratum_ids},
+    )
+    return metadata
 
 
 def generate_dataset(
@@ -335,13 +590,31 @@ def split_train_validation(
     if bids.shape[0] < 2:
         raise ValueError("at least two samples are required for a train/validation split.")
 
+    train_indices, validation_indices = split_train_validation_indices(
+        row_count=int(bids.shape[0]),
+        validation_fraction=validation_fraction,
+        seed=seed,
+    )
+    return bids[train_indices], labels[train_indices], bids[validation_indices], labels[validation_indices]
+
+
+def split_train_validation_indices(
+    row_count: int,
+    validation_fraction: float,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    if not 0.0 < validation_fraction < 1.0:
+        raise ValueError("validation_fraction must be between 0 and 1.")
+    if row_count < 2:
+        raise ValueError("at least two samples are required for a train/validation split.")
+
     rng = np.random.default_rng(seed)
-    order = rng.permutation(bids.shape[0])
-    validation_size = max(1, int(round(bids.shape[0] * validation_fraction)))
-    validation_size = min(validation_size, bids.shape[0] - 1)
+    order = rng.permutation(row_count)
+    validation_size = max(1, int(round(row_count * validation_fraction)))
+    validation_size = min(validation_size, row_count - 1)
     validation_indices = order[:validation_size]
     train_indices = order[validation_size:]
-    return bids[train_indices], labels[train_indices], bids[validation_indices], labels[validation_indices]
+    return train_indices, validation_indices
 
 
 def compute_regression_metrics(predictions: np.ndarray, labels: np.ndarray) -> dict[str, float]:
@@ -352,7 +625,7 @@ def compute_regression_metrics(predictions: np.ndarray, labels: np.ndarray) -> d
     return {"mae": mae, "rmse": rmse, "max_error": max_error}
 
 
-def evaluate_model(
+def predict_model_outputs(
     model: Any,
     x_values: np.ndarray,
     y_values: np.ndarray,
@@ -360,7 +633,7 @@ def evaluate_model(
     label_std: float,
     device: str,
     batch_size: int,
-) -> dict[str, float]:
+) -> tuple[np.ndarray, np.ndarray]:
     torch_module, _, loader_cls, dataset_cls = require_torch_modules()
     model.eval()
     dataset = dataset_cls(
@@ -375,7 +648,52 @@ def evaluate_model(
             pred_scaled = model(batch_x.to(device)).detach().cpu().numpy()
             predictions.append((pred_scaled * label_std + label_mean).astype(np.float32))
             labels.append((batch_y.numpy() * label_std + label_mean).astype(np.float32))
-    return compute_regression_metrics(np.concatenate(predictions), np.concatenate(labels))
+    return np.concatenate(predictions), np.concatenate(labels)
+
+
+def compute_metrics_by_stratum(
+    predictions: np.ndarray,
+    labels: np.ndarray,
+    stratum_ids: np.ndarray,
+) -> dict[str, dict[str, float | int]]:
+    if predictions.shape[0] != stratum_ids.shape[0]:
+        raise ValueError("predictions and stratum_ids must contain the same number of rows.")
+    metrics: dict[str, dict[str, float | int]] = {}
+    for stratum in sorted(set(stratum_ids.astype(str))):
+        mask = stratum_ids.astype(str) == stratum
+        stratum_predictions = predictions[mask]
+        stratum_labels = labels[mask]
+        stratum_metrics = compute_regression_metrics(stratum_predictions, stratum_labels)
+        metrics[stratum] = {
+            "samples": int(stratum_labels.shape[0]),
+            **stratum_metrics,
+        }
+    return metrics
+
+
+def evaluate_model(
+    model: Any,
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    label_mean: float,
+    label_std: float,
+    device: str,
+    batch_size: int,
+    stratum_ids: np.ndarray | None = None,
+) -> dict[str, Any]:
+    predictions, labels = predict_model_outputs(
+        model,
+        x_values,
+        y_values,
+        label_mean=label_mean,
+        label_std=label_std,
+        device=device,
+        batch_size=batch_size,
+    )
+    metrics: dict[str, Any] = compute_regression_metrics(predictions, labels)
+    if stratum_ids is not None:
+        metrics["by_stratum"] = compute_metrics_by_stratum(predictions, labels, stratum_ids)
+    return metrics
 
 
 def train_model(
@@ -403,13 +721,22 @@ def train_model(
     if selected_device == "cuda":
         torch_module.cuda.manual_seed_all(seed)
 
-    bids, labels, dataset_metadata = load_dataset(data_path)
-    train_bids, train_labels, val_bids, val_labels = split_train_validation(
-        bids,
-        labels,
+    bids, labels, dataset_metadata, extra_arrays = load_dataset_arrays(data_path)
+    train_indices, validation_indices = split_train_validation_indices(
+        row_count=int(bids.shape[0]),
         validation_fraction=validation_fraction,
         seed=seed,
     )
+    train_bids = bids[train_indices]
+    train_labels = labels[train_indices]
+    val_bids = bids[validation_indices]
+    val_labels = labels[validation_indices]
+    stratum_ids = extra_arrays.get("stratum_id")
+    val_stratum_ids = None
+    if stratum_ids is not None:
+        if stratum_ids.shape[0] != bids.shape[0]:
+            raise ValueError("stratum_id must contain one value per dataset row.")
+        val_stratum_ids = stratum_ids[validation_indices]
 
     x_center = np.full((FULL_BID_DIMENSION,), 20.0, dtype=np.float32)
     x_scale = np.full((FULL_BID_DIMENSION,), 10.0, dtype=np.float32)
@@ -458,7 +785,7 @@ def train_model(
 
     best_val_rmse = float("inf")
     best_epoch = 0
-    history: list[dict[str, float | int]] = []
+    history: list[dict[str, Any]] = []
     start_time = time.time()
     for epoch in range(1, epochs + 1):
         model.train()
@@ -485,6 +812,7 @@ def train_model(
             label_std=label_std,
             device=selected_device,
             batch_size=batch_size,
+            stratum_ids=val_stratum_ids,
         )
         train_loss = train_loss_sum / max(1, train_rows)
         epoch_record = {
@@ -494,6 +822,8 @@ def train_model(
             "val_rmse": val_metrics["rmse"],
             "val_max_error": val_metrics["max_error"],
         }
+        if "by_stratum" in val_metrics:
+            epoch_record["val_by_stratum"] = val_metrics["by_stratum"]
         history.append(epoch_record)
 
         if val_metrics["rmse"] < best_val_rmse:
@@ -520,6 +850,8 @@ def train_model(
         "validation_samples": int(val_bids.shape[0]),
         "history": history,
     }
+    if val_stratum_ids is not None and history:
+        metrics["validation_by_stratum"] = history[best_epoch - 1].get("val_by_stratum", {})
     (output_dir / "model_config.json").write_text(json.dumps(model_config, indent=2), encoding="utf-8")
     (output_dir / "normalization.json").write_text(json.dumps(normalization, indent=2), encoding="utf-8")
     (output_dir / "metrics.json").write_text(json.dumps(as_jsonable(metrics), indent=2), encoding="utf-8")
@@ -594,6 +926,29 @@ def command_generate(args: argparse.Namespace) -> None:
     print(json.dumps(as_jsonable(metadata), ensure_ascii=False, indent=2))
 
 
+def command_generate_stratified(args: argparse.Namespace) -> None:
+    options = optimizer.ObjectiveOptions(
+        price_scale=args.price_scale,
+        score_scale=args.score_scale,
+        temperature=args.temperature,
+        invalid_cost=args.invalid_cost,
+    )
+    metadata = generate_stratified_dataset(
+        samples=args.samples,
+        seed=args.seed,
+        output_path=args.output,
+        workers=args.workers,
+        pool_batch_size=args.pool_batch_size,
+        max_candidate_multiplier=args.max_candidate_multiplier,
+        elite_threshold=args.elite_threshold,
+        very_low_threshold=args.very_low_threshold,
+        low_threshold=args.low_threshold,
+        chunksize=args.chunksize,
+        options=options,
+    )
+    print(json.dumps(as_jsonable(metadata), ensure_ascii=False, indent=2))
+
+
 def command_train(args: argparse.Namespace) -> None:
     metrics = train_model(
         data_path=args.data,
@@ -643,6 +998,26 @@ def build_parser() -> argparse.ArgumentParser:
     generate_parser.add_argument("--temperature", type=float, default=optimizer.ObjectiveOptions().temperature)
     generate_parser.add_argument("--invalid-cost", type=float, default=optimizer.ObjectiveOptions().invalid_cost)
     generate_parser.set_defaults(func=command_generate)
+
+    stratified_parser = subparsers.add_parser(
+        "generate-stratified",
+        help="Generate a global [10,30]^20 dataset enriched by low soft-loss samples.",
+    )
+    stratified_parser.add_argument("--samples", type=int, default=1024)
+    stratified_parser.add_argument("--seed", type=int, default=42)
+    stratified_parser.add_argument("--output", type=Path, required=True)
+    stratified_parser.add_argument("--workers", type=int, default=60)
+    stratified_parser.add_argument("--chunksize", type=int, default=64)
+    stratified_parser.add_argument("--pool-batch-size", type=int, default=8192)
+    stratified_parser.add_argument("--max-candidate-multiplier", type=int, default=10)
+    stratified_parser.add_argument("--elite-threshold", type=float, default=DEFAULT_ELITE_THRESHOLD)
+    stratified_parser.add_argument("--very-low-threshold", type=float, default=DEFAULT_VERY_LOW_THRESHOLD)
+    stratified_parser.add_argument("--low-threshold", type=float, default=DEFAULT_LOW_THRESHOLD)
+    stratified_parser.add_argument("--price-scale", type=float, default=optimizer.ObjectiveOptions().price_scale)
+    stratified_parser.add_argument("--score-scale", type=float, default=optimizer.ObjectiveOptions().score_scale)
+    stratified_parser.add_argument("--temperature", type=float, default=optimizer.ObjectiveOptions().temperature)
+    stratified_parser.add_argument("--invalid-cost", type=float, default=optimizer.ObjectiveOptions().invalid_cost)
+    stratified_parser.set_defaults(func=command_generate_stratified)
 
     train_parser = subparsers.add_parser("train", help="Train a Residual MLP surrogate.")
     train_parser.add_argument("--data", type=Path, required=True)
