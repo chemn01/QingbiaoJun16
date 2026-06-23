@@ -82,3 +82,5 @@ Gradient surrogate optimizer implementation:
   - `uv run --no-sync ruff check surrogate_bid_optimizer.py validate_de_results.py tests/test_surrogate_bid_optimizer.py tests/test_validate_de_results.py`
   - `uv run --no-sync pytest -q`
   - Result: all passed; two optional PyTorch smoke tests skipped locally because torch is not installed.
+- Server first run exposed a PyTorch autograd issue in `surrogate_bid_optimizer.py`: each optimization step computed adjustable bids once and then called `backward()` once per environment chunk, reusing a freed graph on the second chunk.
+- Fixed the optimizer to recompute the sigmoid-parameterized adjustable bids inside each environment chunk before `backward()`, preserving gradient accumulation without `retain_graph=True`.

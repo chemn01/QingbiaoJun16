@@ -307,10 +307,10 @@ def optimize_start_batch(
     env_count = int(env_tensor.shape[0])
     for _ in range(steps):
         torch_optimizer.zero_grad(set_to_none=True)
-        adjustable = bids_from_logits(z_values, lower_tensor, upper_tensor)
         for start in range(0, env_count, env_batch_size):
             env_chunk = env_tensor[start : start + env_batch_size]
             weight = float(env_chunk.shape[0]) / float(env_count)
+            adjustable = bids_from_logits(z_values, lower_tensor, upper_tensor)
             loss_per_start = predicted_loss_for_env_chunk(runtime, adjustable, env_chunk)
             objective = loss_per_start.mean() * weight
             objective.backward()
