@@ -49,3 +49,15 @@ Rule update implementation:
 - Updated code to match the revised `qingbiao.md` final winner rule: after `K = K1 + K2`, prioritize finalists with `X_i > K`; if none exist, select the finalist with the smallest `|X_i-K|`.
 - Updated the forward calculator, DE validation evaluator, DE surrogate objective, and tests.
 - Existing generated optimizer and validation outputs were produced under the previous final-stage interpretation and should be regenerated before drawing conclusions from their probabilities.
+
+## 2026-06-23
+
+Neural surrogate implementation:
+
+- Added `neural_surrogate.py` with `generate`, `train`, and `predict` CLI commands.
+- Implemented the first label definition: complete `X1..X20` bid vector to average DE soft loss over 108 discrete scenario combinations, reusing `de_softmax_optimizer.evaluate_scenario_loss`.
+- Implemented a PyTorch Residual MLP training path with input normalization, standardized labels, Huber loss, AdamW, automatic `cuda > mps > cpu` device selection, and saved model/config/normalization/metrics artifacts.
+- Added `tests/test_neural_surrogate.py` for bid splitting, deterministic labels, dataset generation, prediction payload parsing, and training smoke behavior when PyTorch is installed.
+- Ran `uv run --no-sync python neural_surrogate.py generate --samples 16 --seed 42 --output surrogate_runs/smoke/data.npz --workers 1`; result: completed in about 0.07 seconds, label range roughly `[0.0247, 3.9989]`.
+- Ran `uv run --no-sync ruff check .`, `uv run --no-sync mypy`, and `uv run --no-sync pytest -q`; result: all passed, with the PyTorch training smoke test skipped locally because PyTorch was not installed.
+- Attempted local `uv sync`; it repeatedly stalled while downloading the 83.9 MiB torch wheel, so full training smoke remains pending until dependency sync succeeds locally or on the Linux GPU server.

@@ -25,3 +25,11 @@ This file records durable modeling and engineering decisions. Keep entries conci
 
 - Supersede the earlier final-stage one-sided assumption: after computing `K = K1 + K2`, first choose the closest bidder among finalists with `X_i > K`; if no finalist has `X_i > K`, choose the finalist with the smallest `|X_i - K|`.
 - The exact forward calculator, DE validator, and DE surrogate objective must all use this fallback rule. Existing generated optimizer/validation artifacts from before this date should be treated as stale until regenerated.
+
+## 2026-06-23
+
+- First neural surrogate targets the current DE soft-loss function, not true winning probability.
+- Neural surrogate input is the complete 20-dimensional bid vector `X1..X20`, sampled over the broad domain `[10, 30]` for every unit.
+- A fixed full bid vector's label is the average `evaluate_scenario_loss` value over the 108 combinations of `Q`, `B2`, excluded-lowest-count, and `target_n`; `K2` remains averaged inside the existing DE soft-loss evaluator.
+- Use a Residual MLP as the default neural surrogate architecture because it is lightweight for 20-dimensional tabular regression while supporting deeper nonlinear interactions and future gradient-based bid search.
+- Local development only needs smoke-scale runs; full training is expected to run on the Linux GPU server after syncing PyTorch dependencies.

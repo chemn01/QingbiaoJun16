@@ -5,6 +5,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy>=2.0.0",
     "scipy>=1.13.0",
+    "torch>=2.3.0",
 ]
 
 [dependency-groups]
@@ -24,6 +25,7 @@ python_version = "3.12"
 files = [
     "de_softmax_optimizer.py",
     "forward_bidding_calculator.py",
+    "neural_surrogate.py",
     "validate_de_results.py",
     "tests",
 ]

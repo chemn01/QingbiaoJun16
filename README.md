@@ -44,6 +44,36 @@ uv run mypy
 uv run pytest
 ```
 
+## Neural Surrogate
+
+`neural_surrogate.py` trains a Residual MLP to approximate the current Differential Evolution soft-loss calculation. The input is the full bid vector `X1..X20`, sampled from `[10, 30]`; the label is the average DE soft loss over the 108 discrete scenario combinations.
+
+Local smoke data generation:
+
+```bash
+uv run python neural_surrogate.py generate --samples 1024 --seed 42 --output surrogate_runs/smoke/data.npz --workers 1
+```
+
+Local smoke training, after PyTorch dependencies are installed:
+
+```bash
+uv run python neural_surrogate.py train --data surrogate_runs/smoke/data.npz --output-dir surrogate_runs/smoke/model --epochs 2 --batch-size 128 --device auto
+```
+
+Linux GPU server training example:
+
+```bash
+uv sync
+uv run python neural_surrogate.py generate --samples 131072 --seed 42 --workers -1 --output surrogate_runs/full_131072/data.npz
+uv run python neural_surrogate.py train --data surrogate_runs/full_131072/data.npz --output-dir surrogate_runs/full_131072/model --epochs 200 --batch-size 4096 --device auto
+```
+
+Prediction expects a JSON file containing either an `X1` through `X20` object, one 20-value list, or a list of 20-value lists:
+
+```bash
+uv run python neural_surrogate.py predict --model-dir surrogate_runs/full_131072/model --bids-json bids.json --device auto --compare-exact
+```
+
 ## Planned Workflow
 
 1. Implement and test the exact rule engine.
