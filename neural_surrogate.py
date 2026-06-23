@@ -624,7 +624,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_parser.add_argument("--samples", type=int, default=1024)
     generate_parser.add_argument("--seed", type=int, default=42)
     generate_parser.add_argument("--output", type=Path, required=True)
-    generate_parser.add_argument("--workers", type=int, default=1)
+    generate_parser.add_argument("--workers", type=int, default=60)
     generate_parser.add_argument("--chunksize", type=int, default=64)
     generate_parser.add_argument("--random", action="store_true", help="Use pseudo-random sampling instead of Sobol.")
     generate_parser.add_argument("--price-scale", type=float, default=optimizer.ObjectiveOptions().price_scale)

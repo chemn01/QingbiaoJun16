@@ -64,7 +64,7 @@ Linux GPU server training example:
 
 ```bash
 uv sync
-uv run python neural_surrogate.py generate --samples 131072 --seed 42 --workers -1 --output surrogate_runs/full_131072/data.npz
+uv run python neural_surrogate.py generate --samples 131072 --seed 42 --workers 60 --output surrogate_runs/full_131072/data.npz
 uv run python neural_surrogate.py train --data surrogate_runs/full_131072/data.npz --output-dir surrogate_runs/full_131072/model --epochs 200 --batch-size 4096 --device auto
 ```
 
