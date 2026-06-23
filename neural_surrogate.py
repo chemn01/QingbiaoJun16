@@ -25,15 +25,26 @@ from scipy.stats import qmc
 
 import de_softmax_optimizer as optimizer
 
+torch: Any | None
+nn: Any | None
+DataLoader: Any | None
+TensorDataset: Any | None
+
 try:
-    import torch
-    from torch import nn
-    from torch.utils.data import DataLoader, TensorDataset
+    import torch as torch_import
+    from torch import nn as nn_import
+    from torch.utils.data import DataLoader as DataLoader_import
+    from torch.utils.data import TensorDataset as TensorDataset_import
 except ModuleNotFoundError:  # pragma: no cover - exercised only when torch is not installed.
     torch = None
     nn = None
     DataLoader = None
     TensorDataset = None
+else:
+    torch = torch_import
+    nn = nn_import
+    DataLoader = DataLoader_import
+    TensorDataset = TensorDataset_import
 
 
 FULL_BID_DIMENSION = optimizer.NUM_UNITS
