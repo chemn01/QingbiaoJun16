@@ -1,6 +1,6 @@
 DE 报价候选真实中标概率验证报告
 ========================================================================
-生成时间: 2026-06-19 21:00:30
+生成时间: 2026-06-23 10:24:36
 初筛样本数: 32768
 复验Top: 5
 复验样本数: 65536
@@ -8,58 +8,56 @@ DE 报价候选真实中标概率验证报告
 
 最终排序（优先使用复验结果）
 ------------------------------------------------------------------------
- 1. checkpoint_iter_0700     phase=refine  P(X5中标)=51.247543% 95%CI约±0.1659% samples=65536 objective=0.94019208
- 2. checkpoint_iter_0650     phase=refine  P(X5中标)=51.247543% 95%CI约±0.1659% samples=65536 objective=0.94019208
- 3. checkpoint_iter_0500     phase=refine  P(X5中标)=51.246775% 95%CI约±0.1656% samples=65536 objective=0.94084567
- 4. checkpoint_iter_0600     phase=initial P(X5中标)=51.234417% 95%CI约±0.2341% samples=32768 objective=0.94051925
- 5. checkpoint_iter_0750     phase=refine  P(X5中标)=51.231836% 95%CI约±0.1658% samples=65536 objective=0.93993893
- 6. checkpoint_iter_0450     phase=refine  P(X5中标)=51.229750% 95%CI约±0.1657% samples=65536 objective=0.94155740
- 7. checkpoint_iter_0400     phase=initial P(X5中标)=51.219940% 95%CI约±0.2340% samples=32768 objective=0.94224919
- 8. checkpoint_iter_0350     phase=initial P(X5中标)=51.207554% 95%CI约±0.2331% samples=32768 objective=0.94497108
- 9. checkpoint_iter_0250     phase=initial P(X5中标)=51.034866% 95%CI约±0.2358% samples=32768 objective=0.94782117
-10. checkpoint_iter_0200     phase=initial P(X5中标)=51.031212% 95%CI约±0.2313% samples=32768 objective=0.95172204
-11. checkpoint_iter_0300     phase=initial P(X5中标)=50.962453% 95%CI约±0.2370% samples=32768 objective=0.94710913
-12. checkpoint_iter_0150     phase=initial P(X5中标)=50.792534% 95%CI约±0.2286% samples=32768 objective=0.95587659
-13. checkpoint_iter_0100     phase=initial P(X5中标)=50.593463% 95%CI约±0.2303% samples=32768 objective=0.96159924
-14. checkpoint_iter_0050     phase=initial P(X5中标)=47.364892% 95%CI约±0.2150% samples=32768 objective=1.02274522
-15. checkpoint_iter_0550     phase=initial P(X5中标)=41.383861% 95%CI约±0.2071% samples=32768 objective=0.94060396
-16. checkpoint_iter_0800     phase=initial P(X5中标)=41.381064% 95%CI约±0.2073% samples=32768 objective=0.93985819
-17. best_result              phase=initial P(X5中标)=41.381064% 95%CI约±0.2073% samples=32768 objective=0.93985819
+ 1. checkpoint_iter_0300     phase=refine  P(X5中标)=48.73% 95%CI约±0.13% samples=65536 objective=0.93105953
+ 2. checkpoint_iter_0200     phase=refine  P(X5中标)=47.69% 95%CI约±0.13% samples=65536 objective=0.94962980
+ 3. checkpoint_iter_0100     phase=refine  P(X5中标)=46.24% 95%CI约±0.12% samples=65536 objective=0.97303243
+ 4. checkpoint_iter_0050     phase=refine  P(X5中标)=44.14% 95%CI约±0.15% samples=65536 objective=1.02239670
+ 5. checkpoint_iter_0700     phase=refine  P(X5中标)=37.06% 95%CI约±0.12% samples=65536 objective=0.91891512
+ 6. checkpoint_iter_0800     phase=initial P(X5中标)=37.04% 95%CI约±0.17% samples=32768 objective=0.91809539
+ 7. best_result              phase=initial P(X5中标)=37.04% 95%CI约±0.17% samples=32768 objective=0.91796659
+ 8. checkpoint_iter_0500     phase=initial P(X5中标)=37.04% 95%CI约±0.17% samples=32768 objective=0.92051254
+ 9. checkpoint_iter_0550     phase=initial P(X5中标)=33.94% 95%CI约±0.17% samples=32768 objective=0.91976934
+10. checkpoint_iter_0600     phase=initial P(X5中标)=33.94% 95%CI约±0.17% samples=32768 objective=0.91976934
+11. checkpoint_iter_0150     phase=initial P(X5中标)=33.91% 95%CI约±0.17% samples=32768 objective=0.95974048
+12. checkpoint_iter_0750     phase=initial P(X5中标)=33.55% 95%CI约±0.17% samples=32768 objective=0.91845104
+13. checkpoint_iter_0650     phase=initial P(X5中标)=33.55% 95%CI约±0.17% samples=32768 objective=0.91917685
+14. checkpoint_iter_0250     phase=initial P(X5中标)=33.45% 95%CI约±0.18% samples=32768 objective=0.93499825
+15. checkpoint_iter_0450     phase=initial P(X5中标)=33.43% 95%CI约±0.17% samples=32768 objective=0.92200556
+16. checkpoint_iter_0350     phase=initial P(X5中标)=33.28% 95%CI约±0.17% samples=32768 objective=0.92692927
+17. checkpoint_iter_0400     phase=initial P(X5中标)=32.99% 95%CI约±0.17% samples=32768 objective=0.92324694
 
 最佳候选可调报价
 ------------------------------------------------------------------------
-  X3   = 13.0056
-  X5   = 18.9999
-  X6   = 19.0003
-  X7   = 13.0072
-  X9   = 13.4001
-  X10  = 17.4549
-  X11  = 19.0001
-  X13  = 15.5032
-  X16  = 14.8176
-  X17  = 13.9990
-  X19  = 20.1867
-  X20  = 10.3796
+  X3   = 16.97
+  X5   = 19.00
+  X6   = 19.01
+  X7   = 13.28
+  X9   = 13.07
+  X10  = 13.02
+  X11  = 19.00
+  X13  = 14.98
+  X16  = 14.32
+  X17  = 13.06
+  X19  = 20.07
+  X20  = 14.71
 
 最佳候选 X5 状态分布
 ------------------------------------------------------------------------
-  中标                     10881731 (51.2475%)
-  环节五：未中标                 5006580 (23.5785%)
-  环节五：无低于K候选人             3509410 (16.5276%)
-  环节四：清标得分不足              1835862 (8.6460%)
-  环节四：报价最低剔除                   81 (0.0004%)
+  中标                     10347912 (48.73%)
+  环节五：未中标                 6200895 (29.20%)
+  环节四：清标得分不足              4007481 (18.87%)
+  环节四：报价最低剔除               677376 (3.19%)
 
 最佳候选中标人分布（非零项）
 ------------------------------------------------------------------------
-  X5           10881731 (51.2475%)
-  无中标人          3738033 (17.6043%)
-  X4            2042481 (9.6191%)
-  X1            2008565 (9.4593%)
-  X2             728652 (3.4316%)
-  X8             712659 (3.3563%)
-  X10            468739 (2.2075%)
-  X6             269330 (1.2684%)
-  X14            215349 (1.0142%)
-  X15            134562 (0.6337%)
-  X11             29977 (0.1412%)
-  X12              3586 (0.0169%)
+  X5           10347912 (48.73%)
+  X1            2667931 (12.56%)
+  X4            2291942 (10.79%)
+  X6            2002660 (9.43%)
+  X11           1758762 (8.28%)
+  X8             828653 (3.90%)
+  X2             815515 (3.84%)
+  X14            215225 (1.01%)
+  X3             157742 (0.74%)
+  X15            140102 (0.66%)
+  X12              7220 (0.03%)
