@@ -40,13 +40,17 @@ class ValidateDeResultsTests(unittest.TestCase):
                 json.dumps(adjustable_payload(0.20, offset=0.02)),
                 encoding="utf-8",
             )
+            (result_dir / "candidate_rank_001.json").write_text(
+                json.dumps(adjustable_payload(0.05)),
+                encoding="utf-8",
+            )
 
             candidates = validator.load_candidates(result_dir)
-            self.assertEqual([candidate.objective_value for candidate in candidates], [0.10, 0.20, 0.30])
+            self.assertEqual([candidate.objective_value for candidate in candidates], [0.05, 0.10, 0.20])
 
             top_one = validator.select_top_candidates(candidates, 1)
             self.assertEqual(len(top_one), 1)
-            self.assertEqual(top_one[0].objective_value, 0.10)
+            self.assertEqual(top_one[0].objective_value, 0.05)
 
             all_candidates = validator.select_top_candidates(candidates, 0)
             self.assertEqual(len(all_candidates), 3)

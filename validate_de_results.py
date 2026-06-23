@@ -275,19 +275,61 @@ def candidate_from_file(path: Path) -> Candidate:
     )
 
 
+def candidate_dedupe_key(candidate: Candidate) -> tuple[float, ...]:
+    return tuple(
+        round(float(candidate.adjustable_bids[unit_key(unit)]), OUTPUT_DECIMAL_PLACES)
+        for unit in optimizer.ADJUSTABLE_UNITS
+    )
+
+
+def candidate_path_priority(candidate: Candidate) -> int:
+    name = candidate.source_path.name
+    if name == "best_result.json":
+        return 0
+    if name.startswith("candidate_rank_"):
+        return 1
+    if name.startswith("checkpoint_iter_"):
+        return 2
+    return 3
+
+
+def deduplicate_candidates(candidates: Iterable[Candidate]) -> list[Candidate]:
+    selected: dict[tuple[float, ...], Candidate] = {}
+    for candidate in candidates:
+        key = candidate_dedupe_key(candidate)
+        existing = selected.get(key)
+        if existing is None:
+            selected[key] = candidate
+            continue
+        candidate_sort_key = (
+            candidate.objective_value,
+            candidate_path_priority(candidate),
+            candidate.name,
+        )
+        existing_sort_key = (
+            existing.objective_value,
+            candidate_path_priority(existing),
+            existing.name,
+        )
+        if candidate_sort_key < existing_sort_key:
+            selected[key] = candidate
+    return list(selected.values())
+
+
 def load_candidates(result_dir: Path) -> list[Candidate]:
     paths: list[Path] = []
     best_path = result_dir / "best_result.json"
     if best_path.exists():
         paths.append(best_path)
     paths.extend(sorted(result_dir.glob("checkpoint_iter_*.json")))
+    paths.extend(sorted(result_dir.glob("candidate_rank_*.json")))
 
     if not paths:
         raise FileNotFoundError(
-            f"No best_result.json or checkpoint_iter_*.json files found in {result_dir}."
+            f"No best_result.json, checkpoint_iter_*.json, or candidate_rank_*.json files found in {result_dir}."
         )
 
-    candidates = [candidate_from_file(path) for path in paths]
+    candidates = deduplicate_candidates(candidate_from_file(path) for path in paths)
     candidates.sort(key=lambda item: (item.objective_value, item.name))
     return candidates
 

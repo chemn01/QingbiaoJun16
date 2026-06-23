@@ -1,6 +1,6 @@
 # Project Memory
 
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 ## Source of Truth
 
@@ -38,12 +38,22 @@ Last updated: 2026-06-22
   - Uses a final-stage softmax matching the current rule: prioritize finalists with `X_i > K`, then fall back to the smallest `|X_i-K|` if none exist.
   - Saves checkpoints every `checkpoint_every` iterations; default is every 50 iterations.
 - `validate_de_results.py` validates optimizer checkpoints/results against the true current rules.
-  - It reads `best_result.json` and `checkpoint_iter_*.json` from an optimizer result directory.
+  - It reads `best_result.json`, `checkpoint_iter_*.json`, and neural surrogate `candidate_rank_*.json` files from an optimizer result directory.
+  - It deduplicates candidates by rounded adjustable bids before validation.
   - It samples the 8 non-adjustable units with Sobol and exactly enumerates the 324 discrete rule scenarios per environment sample.
   - Defaults: first pass `samples=32768`, `top=20`; automatic refinement `refine_top=5`, `refine_samples=65536`.
   - Outputs `validation_summary.csv`, `validation_results.json`, and `validation_report.txt`.
+- `neural_surrogate.py` trains and uses a Residual MLP surrogate for the DE soft-loss objective.
+  - Input is the full bid vector `X1..X20`.
+  - Label is the average DE soft loss over 108 combinations of `Q`, `B2`, excluded-lowest-count, and `target_n`; `K2` is averaged inside `evaluate_scenario_loss`.
+  - Full run artifact currently expected at `surrogate_runs/full_131072/model`.
+- `surrogate_bid_optimizer.py` uses a trained neural surrogate for multi-start Adam gradient optimization of the 12 adjustable units.
+  - Competitor/non-adjustable bids are Sobol-sampled over configured ranges.
+  - Objective is mean predicted surrogate soft-loss, not true winning probability.
+  - Outputs `best_result.json`, `candidate_rank_*.json`, `best_result.txt`, and `optimizer_summary.json` for downstream exact validation.
 - `tests/test_de_softmax_optimizer.py` contains smoke and mapping tests for the optimizer.
 - `tests/test_validate_de_results.py` contains candidate loading, mapping, count, refinement-selection, and evaluator-consistency tests for the validator.
+- `tests/test_surrogate_bid_optimizer.py` contains range validation, Sobol sampling, bid composition, payload, and optional PyTorch smoke tests for the gradient surrogate optimizer.
 - Local `uv` environment exists at `.venv`; use `uv --cache-dir .uv-cache ...` locally because the sandbox blocks `~/.cache/uv`.
 - Quality gate for all code changes: add/maintain pytest unit tests and pass `uv run ruff check .`, `uv run mypy`, and `uv run pytest`.
 - Long-term project files now include:
@@ -61,11 +71,14 @@ Last updated: 2026-06-22
 - Rule-critical rounding should use ordinary round-half-up behavior unless later confirmed otherwise.
 - Tie-breaking and the distinction between quoted price and discount rate are high-risk parts of the implementation and need tests.
 - The optimizer's objective is not true winning probability. Low objective values should be treated as candidate-generation signals, then checked by `validate_de_results.py`.
+- The neural surrogate gradient optimizer should be treated as a faster candidate generator only; final trust still comes from exact validation.
 - The optimizer was committed and pushed to GitHub as `48f0953 Add differential evolution softmax optimizer`.
 - On 2026-06-22, `qingbiao.md` changed the final winner stage so that a winner is still selected when no finalist has `X_i > K`; existing generated DE/validation artifacts from the older final-stage rule are stale until rerun.
+- Current full neural surrogate training metrics from `surrogate_runs/full_131072/model/metrics.json`: best epoch 12, best validation RMSE about 0.3515, validation MAE about 0.2388, label range `[0, 4]`, and rough validation `R^2` about 0.794. Later epochs overfit, but `model.pt` stores the best checkpoint.
 
 ## Open Questions
 
-- Rerun DE optimization with `samples=8192` under the 2026-06-22 final-stage fallback rule and record results.
-- Rerun high-precision validation on the optimizer output directory and compare surrogate objective ranking against true `X5` winning probability.
+- Run `surrogate_bid_optimizer.py` on the Linux GPU/server artifact and record the Top K surrogate candidates.
+- Run high-precision validation on `surrogate_runs/full_131072/optimizer` using `--workers 60` and compare surrogate ranking against true `X5` winning probability.
+- Rerun DE optimization with `samples=8192` under the 2026-06-22 final-stage fallback rule only if a DE baseline is still needed.
 - Add broader tests for the official rule engine and tie-breaking before relying on long optimization runs.

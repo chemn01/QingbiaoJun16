@@ -33,3 +33,6 @@ This file records durable modeling and engineering decisions. Keep entries conci
 - A fixed full bid vector's label is the average `evaluate_scenario_loss` value over the 108 combinations of `Q`, `B2`, excluded-lowest-count, and `target_n`; `K2` remains averaged inside the existing DE soft-loss evaluator.
 - Use a Residual MLP as the default neural surrogate architecture because it is lightweight for 20-dimensional tabular regression while supporting deeper nonlinear interactions and future gradient-based bid search.
 - Local development only needs smoke-scale runs; full training is expected to run on the Linux GPU server after syncing PyTorch dependencies.
+- Use multi-start Adam gradient optimization as the first neural-surrogate candidate generator, because the trained PyTorch surrogate is differentiable and should be faster than Differential Evolution for this objective.
+- The neural-surrogate optimizer outputs candidates only; exact `X5` winning-probability validation remains a separate step through `validate_de_results.py`.
+- Use explicit `--workers 60` for server validation commands rather than `--workers -1`.

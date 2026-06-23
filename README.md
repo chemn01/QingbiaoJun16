@@ -74,6 +74,32 @@ Prediction expects a JSON file containing either an `X1` through `X20` object, o
 uv run python neural_surrogate.py predict --model-dir surrogate_runs/full_131072/model --bids-json bids.json --device auto --compare-exact
 ```
 
+Gradient-based surrogate optimization:
+
+```bash
+uv run python surrogate_bid_optimizer.py \
+  --model-dir surrogate_runs/full_131072/model \
+  --output-dir surrogate_runs/full_131072/optimizer \
+  --samples 8192 \
+  --starts 256 \
+  --steps 500 \
+  --top-k 20 \
+  --seed 42 \
+  --device auto
+```
+
+The optimizer writes `best_result.json` and `candidate_rank_*.json` files that can be checked with the exact validator:
+
+```bash
+uv run python validate_de_results.py \
+  --result-dir surrogate_runs/full_131072/optimizer \
+  --output-dir surrogate_runs/full_131072/validation \
+  --samples 32768 \
+  --refine-top 5 \
+  --refine-samples 65536 \
+  --workers 60
+```
+
 ## Planned Workflow
 
 1. Implement and test the exact rule engine.

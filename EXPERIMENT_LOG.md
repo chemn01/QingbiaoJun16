@@ -61,3 +61,24 @@ Neural surrogate implementation:
 - Ran `uv run --no-sync python neural_surrogate.py generate --samples 16 --seed 42 --output surrogate_runs/smoke/data.npz --workers 1`; result: completed in about 0.07 seconds, label range roughly `[0.0247, 3.9989]`.
 - Ran `uv run --no-sync ruff check .`, `uv run --no-sync mypy`, and `uv run --no-sync pytest -q`; result: all passed, with the PyTorch training smoke test skipped locally because PyTorch was not installed.
 - Attempted local `uv sync`; it repeatedly stalled while downloading the 83.9 MiB torch wheel, so full training smoke remains pending until dependency sync succeeds locally or on the Linux GPU server.
+
+Full surrogate run artifact analysis:
+
+- Dataset command used on the Linux server: `uv run python neural_surrogate.py generate --samples 131072 --seed 42 --workers 60 --output surrogate_runs/full_131072/data.npz`.
+- Full artifact path synced locally: `surrogate_runs/full_131072/`.
+- Dataset labels: range `[0, 4]`, mean about `2.5452`, std about `0.7801`.
+- Training metrics: best epoch 12, best validation RMSE `0.3514548838`, validation MAE `0.2388104796`, validation max error `2.3319456577`; final epoch 200 overfit to validation RMSE about `0.4135`.
+- Interpretation: the model is useful as a soft-loss candidate generator, but final candidate trust still requires exact validation with `validate_de_results.py`.
+
+Gradient surrogate optimizer implementation:
+
+- Added `surrogate_bid_optimizer.py` to optimize the 12 adjustable units with multi-start Adam over the trained neural surrogate.
+- Objective: fixed Sobol competitor environments, minimize mean predicted surrogate soft-loss.
+- Output format: `best_result.json`, `candidate_rank_*.json`, `best_result.txt`, and `optimizer_summary.json`.
+- Updated `validate_de_results.py` to read and deduplicate `candidate_rank_*.json` files.
+- Validation command convention for server runs uses `--workers 60` rather than `--workers -1`.
+- Local checks after implementation:
+  - `python3 -m py_compile surrogate_bid_optimizer.py validate_de_results.py`
+  - `uv run --no-sync ruff check surrogate_bid_optimizer.py validate_de_results.py tests/test_surrogate_bid_optimizer.py tests/test_validate_de_results.py`
+  - `uv run --no-sync pytest -q`
+  - Result: all passed; two optional PyTorch smoke tests skipped locally because torch is not installed.

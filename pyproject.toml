@@ -36,6 +36,7 @@ files = [
     "de_softmax_optimizer.py",
     "forward_bidding_calculator.py",
     "neural_surrogate.py",
+    "surrogate_bid_optimizer.py",
     "validate_de_results.py",
     "tests",
 ]
