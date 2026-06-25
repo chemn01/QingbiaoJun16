@@ -63,10 +63,10 @@ def test_stratified_quotas_match_planned_262144_counts() -> None:
     quotas = surrogate.stratified_quotas(262144)
 
     assert quotas == {
-        surrogate.STRATUM_GLOBAL_UNIFORM: 183502,
-        surrogate.STRATUM_ELITE_LOSS: 26214,
-        surrogate.STRATUM_VERY_LOW_LOSS: 26214,
-        surrogate.STRATUM_LOW_LOSS: 26214,
+        surrogate.STRATUM_GLOBAL_UNIFORM: 104860,
+        surrogate.STRATUM_ELITE_LOSS: 52428,
+        surrogate.STRATUM_VERY_LOW_LOSS: 52428,
+        surrogate.STRATUM_LOW_LOSS: 52428,
     }
 
 
@@ -121,10 +121,10 @@ def test_generate_stratified_dataset_writes_extra_stratum_ids(
     assert float(bids.max()) <= surrogate.FULL_BID_UPPER
     assert loaded_metadata["dataset_type"] == "global_softloss_stratified"
     assert metadata["stratum_counts"] == {
-        surrogate.STRATUM_ELITE_LOSS: 4,
-        surrogate.STRATUM_GLOBAL_UNIFORM: 28,
-        surrogate.STRATUM_LOW_LOSS: 4,
-        surrogate.STRATUM_VERY_LOW_LOSS: 4,
+        surrogate.STRATUM_ELITE_LOSS: 8,
+        surrogate.STRATUM_GLOBAL_UNIFORM: 16,
+        surrogate.STRATUM_LOW_LOSS: 8,
+        surrogate.STRATUM_VERY_LOW_LOSS: 8,
     }
     assert dict(zip(*np.unique(stratum_ids, return_counts=True))) == metadata["stratum_counts"]
 

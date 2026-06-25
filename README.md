@@ -68,9 +68,11 @@ uv run python neural_surrogate.py generate --samples 131072 --seed 42 --workers 
 uv run python neural_surrogate.py train --data surrogate_runs/full_131072/data.npz --output-dir surrogate_runs/full_131072/model --epochs 200 --batch-size 4096 --device auto
 ```
 
-Soft-loss stratified data generation keeps the global `[10, 30]` training domain while enriching low-loss samples. This is the preferred next server run:
+Soft-loss stratified data generation keeps the global `[10, 30]` training domain while enriching low-loss samples. The current stratified mix is `40% global_uniform + 20% elite_loss + 20% very_low_loss + 20% low_loss`. This is the preferred next server workflow:
 
 ```bash
+RUN_DIR=surrogate_runs/global_softloss_stratified_40_20_20_20_262144
+
 uv run python neural_surrogate.py generate-stratified \
   --samples 262144 \
   --seed 42 \
@@ -80,51 +82,39 @@ uv run python neural_surrogate.py generate-stratified \
   --elite-threshold 0.75 \
   --very-low-threshold 1.25 \
   --low-threshold 1.75 \
-  --output surrogate_runs/global_softloss_stratified_262144/data.npz
-```
+  --output "$RUN_DIR/data.npz"
 
-Train the stratified surrogate after the dataset is generated:
-
-```bash
 uv run python neural_surrogate.py train \
-  --data surrogate_runs/global_softloss_stratified_262144/data.npz \
-  --output-dir surrogate_runs/global_softloss_stratified_262144/model \
+  --data "$RUN_DIR/data.npz" \
+  --output-dir "$RUN_DIR/model" \
   --epochs 200 \
   --batch-size 4096 \
   --seed 42 \
   --device auto
-```
 
-Prediction expects a JSON file containing either an `X1` through `X20` object, one 20-value list, or a list of 20-value lists:
-
-```bash
-uv run python neural_surrogate.py predict --model-dir surrogate_runs/full_131072/model --bids-json bids.json --device auto --compare-exact
-```
-
-Gradient-based surrogate optimization:
-
-```bash
 uv run python surrogate_bid_optimizer.py \
-  --model-dir surrogate_runs/full_131072/model \
-  --output-dir surrogate_runs/full_131072/optimizer \
+  --model-dir "$RUN_DIR/model" \
+  --output-dir "$RUN_DIR/optimizer" \
   --samples 8192 \
   --starts 256 \
   --steps 500 \
   --top-k 20 \
   --seed 42 \
   --device auto
-```
 
-The optimizer writes `best_result.json` and `candidate_rank_*.json` files that can be checked with the exact validator:
-
-```bash
 uv run python validate_de_results.py \
-  --result-dir surrogate_runs/full_131072/optimizer \
-  --output-dir surrogate_runs/full_131072/validation \
+  --result-dir "$RUN_DIR/optimizer" \
+  --output-dir "$RUN_DIR/validation" \
   --samples 32768 \
   --refine-top 5 \
   --refine-samples 65536 \
   --workers 60
+```
+
+Prediction expects a JSON file containing either an `X1` through `X20` object, one 20-value list, or a list of 20-value lists:
+
+```bash
+uv run python neural_surrogate.py predict --model-dir "$RUN_DIR/model" --bids-json bids.json --device auto --compare-exact
 ```
 
 ## Planned Workflow

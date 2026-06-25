@@ -266,7 +266,7 @@ def validate_stratified_thresholds(
 def stratified_quotas(samples: int) -> dict[str, int]:
     if samples <= 0:
         raise ValueError("samples must be positive.")
-    low_bucket_count = samples // 10
+    low_bucket_count = samples // 5
     return {
         STRATUM_GLOBAL_UNIFORM: samples - 3 * low_bucket_count,
         STRATUM_ELITE_LOSS: low_bucket_count,
